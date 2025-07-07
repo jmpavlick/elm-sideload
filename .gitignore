@@ -1,2 +1,4 @@
 node_modules
-index.js
+.temp
+.elm.sideload.cache
+dist

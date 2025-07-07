@@ -179,13 +179,22 @@ function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
     const configPath = path.join(runtime.environment.cwd, "elm.sideload.json")
     const configJson = JSON.stringify(config, null, 2)
     const cachePath = path.join(runtime.environment.cwd, ".elm.sideload.cache")
+    const gitignorePath = path.join(runtime.environment.cwd, ".gitignore")
+
+    const addToGitignore = (): Result<void, CommandError> =>
+      runtime.fileSystem
+        .readFile(gitignorePath)
+        .map((content) => (content.includes(".elm.sideload.cache") ? content : content + "\n.elm.sideload.cache\n"))
+        .orElse(() => ok(".elm.sideload.cache\n"))
+        .andThen((content) => runtime.fileSystem.writeFile(gitignorePath, content))
 
     return runtime.fileSystem
       .writeFile(configPath, configJson)
       .andThen(() => runtime.fileSystem.mkdir(cachePath))
+      .andThen(() => addToGitignore())
       .map(() => ({
         success: true,
-        message: `Created elm.sideload.json and .elm.sideload.cache directory`,
+        message: `Created elm.sideload.json, .elm.sideload.cache directory, and updated .gitignore`,
       }))
   }
 

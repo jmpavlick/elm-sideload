@@ -1,0 +1,1 @@
+{"type": "application", "source-directories": ["src"], "elm-version": "0.19.1", "dependencies": {"direct": {"elm/html": "1.0.0"}, "indirect": {}, "test-dependencies": {"direct": {}, "indirect": {}}}}
