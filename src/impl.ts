@@ -325,18 +325,19 @@ function loadElmJson(runtime: Runtime): Result<ElmJson, CommandError> {
 
 function loadSideloadConfig(runtime: Runtime): Result<SideloadConfig, CommandError> {
   const configPath = path.join(runtime.environment.cwd, "elm.sideload.json")
-  const readResult = runtime.fileSystem.readFile(configPath)
 
-  if (readResult.isErr()) {
-    return err("sideloadConfigNotFound")
+  const parseConfig = (content: string): Result<SideloadConfig, CommandError> => {
+    try {
+      return ok(JSON.parse(content) as SideloadConfig)
+    } catch (error) {
+      return err("invalidSideloadConfig")
+    }
   }
 
-  try {
-    const config = JSON.parse(readResult.value) as SideloadConfig
-    return ok(config)
-  } catch (error) {
-    return err("invalidSideloadConfig")
-  }
+  return runtime.fileSystem
+    .readFile(configPath)
+    .mapErr(() => "sideloadConfigNotFound" as const)
+    .andThen(parseConfig)
 }
 
 function checkPackageInElmJson(elmJson: ElmJson, packageName: string): boolean {
