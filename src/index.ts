@@ -166,6 +166,12 @@ function help(): void {
             - Are not accessible,
             - The program will exit, signaling adversity with a list of which packages were available to sideload, and which packages weren't
 
+      elm-sideload install --always
+        Apply the 'elm.sideload.json' without asking for permission. Does all of the above checks, and fails if any of them fail.
+
+      elm-sideload install --dry-run
+        Does everything _except_ overwrite files at the end; doesn't prompt for input.
+
   undoing your sideload configuration:
 
     elm-sideload unload
