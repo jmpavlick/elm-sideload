@@ -4,7 +4,11 @@ import * as fs from "fs"
 import * as path from "path"
 import * as os from "os"
 
-const ellie: string = `
+// =============================================================================
+// Test Data
+// =============================================================================
+
+const testElmApp = `
 module Main exposing (main)
 
 import Browser
@@ -50,15 +54,60 @@ main =
         }
 `
 
-console.log(ellie)
+// The signature patch from lydell's repository
+// https://github.com/lydell/virtual-dom/blob/8c20e5b9f309e82e67284669f3740132a2a4d9d6/src/Elm/Kernel/VirtualDom.js#L42
+const lydellPatchSignature = "too big until after 25 000 years"
 
-const runCommand = (command: string, tempDir: string, cliPath: string): string => {
+// =============================================================================
+// Test Environment
+// =============================================================================
+
+type TestEnvironment = {
+  tempDir: string
+  originalCwd: string
+  cliPath: string
+  elmHome: string
+}
+
+function createTestEnvironment(testName?: string): TestEnvironment {
+  const originalCwd = process.cwd()
+  const tempDirName = testName ? `.temp-${testName}` : ".temp"
+  const tempDir = path.join(originalCwd, tempDirName)
+  const cliPath = path.join(originalCwd, "dist")
+  const elmHome = path.join(os.homedir(), ".elm")
+
+  return { tempDir, originalCwd, cliPath, elmHome }
+}
+
+function setupTestEnvironment(env: TestEnvironment): void {
+  // Clean up any existing temp directory
+  if (fs.existsSync(env.tempDir)) {
+    fs.rmSync(env.tempDir, { recursive: true, force: true })
+  }
+
+  // Create fresh temp directory
+  fs.mkdirSync(env.tempDir, { recursive: true })
+  console.log(`Created temp directory: ${env.tempDir}`)
+}
+
+function cleanupTestEnvironment(env: TestEnvironment): void {
+  // Clean up temp directory
+  if (fs.existsSync(env.tempDir)) {
+    fs.rmSync(env.tempDir, { recursive: true, force: true })
+  }
+}
+
+// =============================================================================
+// Test Utilities
+// =============================================================================
+
+function runCommand(command: string, env: TestEnvironment): string {
   console.log(`Running: ${command}`)
   try {
     return execSync(command, {
-      cwd: tempDir,
+      cwd: env.tempDir,
       encoding: "utf8",
-      env: { ...process.env, PATH: `${cliPath}:${process.env.PATH}` },
+      env: { ...process.env, PATH: `${env.cliPath}:${process.env.PATH}` },
     })
   } catch (error) {
     console.error(`Command failed: ${command}`)
@@ -67,95 +116,179 @@ const runCommand = (command: string, tempDir: string, cliPath: string): string =
   }
 }
 
-const writeTempFile = (contents: string, relativePath: string, tempDir: string): void => {
-  const fullPath = path.join(tempDir, relativePath)
-  console.log("full path:" + fullPath)
+function writeFile(contents: string, relativePath: string, env: TestEnvironment): void {
+  const fullPath = path.join(env.tempDir, relativePath)
   const dir = path.dirname(fullPath)
 
-  // Ensure directory exists
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(fullPath, contents, "utf8")
   console.log(`Wrote file: ${relativePath}`)
 }
 
-// https://github.com/lydell/virtual-dom/blob/8c20e5b9f309e82e67284669f3740132a2a4d9d6/src/Elm/Kernel/VirtualDom.js#L42
-const targetExpectedString: string = "too big until after 25 000 years"
+function readFile(filePath: string): string {
+  return fs.readFileSync(filePath, "utf8")
+}
+
+function fileExists(filePath: string): boolean {
+  return fs.existsSync(filePath)
+}
+
+function getElmHomePackagePath(env: TestEnvironment, packageName: string, version: string): string {
+  const [author, name] = packageName.split("/")
+  return path.join(env.elmHome, "0.19.1", "packages", author, name, version)
+}
+
+function getKernelFilePath(env: TestEnvironment, packageName: string, version: string): string {
+  return path.join(getElmHomePackagePath(env, packageName, version), "src", "Elm", "Kernel", "VirtualDom.js")
+}
+
+// =============================================================================
+// Command Blocks
+// =============================================================================
+
+type CommandBlock = {
+  name: string
+  run: (env: TestEnvironment) => void
+}
+
+const setupElmProject: CommandBlock = {
+  name: "Setup Elm Project",
+  run: (env) => {
+    console.log(`Working in temp directory: ${env.tempDir}`)
+    console.log(`Temp directory contents before:`, fs.readdirSync(env.tempDir))
+
+    // Initialize Elm project
+    runCommand("yes | elm init", env)
+    console.log(`Temp directory contents after elm init:`, fs.readdirSync(env.tempDir))
+
+    // Write our test Elm file
+    writeFile(testElmApp, "src/Main.elm", env)
+    console.log(`Temp directory contents after writing Main.elm:`, fs.readdirSync(env.tempDir, { recursive: true }))
+
+    // Make sure elm/virtual-dom is in dependencies by doing initial build
+    runCommand("elm make src/Main.elm --output=/dev/null", env)
+  },
+}
+
+const initializeSideload: CommandBlock = {
+  name: "Initialize Sideload",
+  run: (env) => {
+    runCommand(`node ${path.join(env.originalCwd, "dist/index.js")} init`, env)
+  },
+}
+
+const configureSideload: CommandBlock = {
+  name: "Configure Sideload",
+  run: (env) => {
+    runCommand(
+      `node ${path.join(env.originalCwd, "dist/index.js")} configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe`,
+      env
+    )
+  },
+}
+
+const applySideloads: CommandBlock = {
+  name: "Apply Sideloads",
+  run: (env) => {
+    runCommand(`node ${path.join(env.originalCwd, "dist/index.js")} install --always`, env)
+  },
+}
+
+const buildElmApp: CommandBlock = {
+  name: "Build Elm App",
+  run: (env) => {
+    runCommand("elm make src/Main.elm --output=main.js", env)
+  },
+}
+
+const unloadSideloads: CommandBlock = {
+  name: "Unload Sideloads",
+  run: (env) => {
+    runCommand(`node ${path.join(env.originalCwd, "dist/index.js")} unload`, env)
+  },
+}
+
+// =============================================================================
+// Test Suite
+// =============================================================================
 
 describe("Integration Test: elm-sideload end-to-end", () => {
-  let tempDir: string
-  let originalCwd: string
-  let cliPath: string
+  let globalEnv: TestEnvironment
 
   beforeAll(() => {
-    originalCwd = process.cwd()
-    tempDir = path.join(originalCwd, ".temp")
-    cliPath = path.join(originalCwd, "dist")
-
-    // Clean up any existing temp directory
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    }
-
-    // Create fresh temp directory
-    fs.mkdirSync(tempDir, { recursive: true })
-    console.log(`Created temp directory: ${tempDir}`)
+    globalEnv = createTestEnvironment()
 
     // Build our CLI first
     console.log("Building CLI...")
-    execSync("npm run build", { cwd: originalCwd })
+    execSync("npm run build", { cwd: globalEnv.originalCwd })
   })
 
-  it("should sideload elm/virtual-dom and produce lydell's patched output", async () => {
-    console.log(`Working in temp directory: ${tempDir}`)
-    console.log(`Temp directory contents before:`, fs.readdirSync(tempDir))
+  it("should resolve branch to SHA and configure sideload", async () => {
+    const env = createTestEnvironment("config-test")
+    setupTestEnvironment(env)
 
-    // Initialize Elm project
-    runCommand("yes | elm init", tempDir, cliPath)
+    try {
+      // Execute command blocks
+      setupElmProject.run(env)
+      initializeSideload.run(env)
+      configureSideload.run(env)
 
-    console.log(`Temp directory contents after elm init:`, fs.readdirSync(tempDir))
+      // Verify configuration was created correctly
+      const sideloadConfig = JSON.parse(readFile(path.join(env.tempDir, "elm.sideload.json")))
+      expect(sideloadConfig.sideloads).toHaveLength(1)
+      expect(sideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
+      expect(sideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
+      expect(sideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
 
-    // Write our test Elm file
-    writeTempFile(ellie, "src/Main.elm", tempDir)
+      // Verify that the branch was resolved to a SHA
+      const pinTo = sideloadConfig.sideloads[0].sideloadedPackage.pinTo
+      expect(pinTo).toHaveProperty("sha")
+      expect(pinTo.sha).toMatch(/^[a-f0-9]{40}$/) // SHA should be 40 hex characters
+      expect(pinTo).not.toHaveProperty("branch") // Should not have branch anymore
+    } finally {
+      cleanupTestEnvironment(env)
+    }
+  }, 30000)
 
-    console.log(`Temp directory contents after writing Main.elm:`, fs.readdirSync(tempDir, { recursive: true }))
-    console.log(`Main.elm content:`, fs.readFileSync(path.join(tempDir, "src/Main.elm"), "utf8").slice(0, 200) + "...")
+  it("should complete full sideload cycle with lydell's patches", async () => {
+    const env = createTestEnvironment("full-cycle-test")
+    setupTestEnvironment(env)
 
-    // Make sure elm/virtual-dom is in dependencies by doing initial build
-    runCommand("elm make src/Main.elm --output=/dev/null", tempDir, cliPath)
+    try {
+      // Execute command blocks
+      setupElmProject.run(env)
+      initializeSideload.run(env)
+      configureSideload.run(env)
+      applySideloads.run(env)
 
-    // Initialize elm-sideload
-    runCommand("node " + path.join(originalCwd, "dist/index.js") + " init", tempDir, cliPath)
+      // Verify packages were installed to ELM_HOME
+      const packagePath = getElmHomePackagePath(env, "elm/virtual-dom", "1.0.4")
+      expect(fileExists(packagePath)).toBe(true)
 
-    // Configure sideload for elm/virtual-dom
-    runCommand(
-      "node " +
-        path.join(originalCwd, "dist/index.js") +
-        " configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
-      tempDir,
-      cliPath
-    )
+      // Verify lydell's patches are present
+      const kernelFilePath = getKernelFilePath(env, "elm/virtual-dom", "1.0.4")
+      expect(fileExists(kernelFilePath)).toBe(true)
 
-    // Apply sideloads (when we implement this)
-    // runCommand('node ' + path.join(originalCwd, 'dist/index.js') + ' install --always', tempDir, cliPath)
+      const kernelContent = readFile(kernelFilePath)
+      expect(kernelContent).toContain(lydellPatchSignature)
 
-    // Build with sideloaded packages
-    // runCommand('yes | elm make src/Main.elm --output=main.js', tempDir, cliPath)
+      // Build with sideloaded packages
+      buildElmApp.run(env)
 
-    // Check that the sideloaded code is present
-    // const mainJs = fs.readFileSync(path.join(tempDir, 'main.js'), 'utf8')
-    // expect(mainJs).toContain(targetExpectedString)
+      // Verify the build succeeded with the sideloaded packages
+      const mainJsPath = path.join(env.tempDir, "main.js")
+      expect(fileExists(mainJsPath)).toBe(true)
 
-    // For now, just verify our config was created correctly
-    const sideloadConfig = JSON.parse(fs.readFileSync(path.join(tempDir, "elm.sideload.json"), "utf8"))
-    expect(sideloadConfig.sideloads).toHaveLength(1)
-    expect(sideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
-    expect(sideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
-    expect(sideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
+      // The compiled output won't contain the comment, but the fact that it built
+      // successfully with our sideloaded package proves the patches are active
 
-    // Verify that the branch was resolved to a SHA
-    const pinTo = sideloadConfig.sideloads[0].sideloadedPackage.pinTo
-    expect(pinTo).toHaveProperty("sha")
-    expect(pinTo.sha).toMatch(/^[a-f0-9]{40}$/) // SHA should be 40 hex characters
-    expect(pinTo).not.toHaveProperty("branch") // Should not have branch anymore
-  }, 30000) // 30 second timeout for this integration test
+      // Test unload functionality
+      unloadSideloads.run(env)
+
+      // Verify package was removed from ELM_HOME
+      expect(fileExists(packagePath)).toBe(false)
+    } finally {
+      cleanupTestEnvironment(env)
+    }
+  }, 60000) // Longer timeout for full cycle
 })

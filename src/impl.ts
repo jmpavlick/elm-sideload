@@ -554,6 +554,11 @@ function copyDirectoryRecursive(source: string, target: string): void {
 
   const items = fs.readdirSync(source)
   for (const item of items) {
+    // Skip .git directory to avoid permission issues
+    if (item === ".git") {
+      continue
+    }
+
     const sourcePath = path.join(source, item)
     const targetPath = path.join(target, item)
 
