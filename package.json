@@ -4,6 +4,9 @@
   "description": "Sideload / override Elm packages from your elm.json.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "elm-sideload": "dist/index.js"
+  },
   "scripts": {
     "prebuild": "node scripts/generate-help.js",
     "build": "tsc",
