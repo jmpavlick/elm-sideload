@@ -145,6 +145,10 @@ describe("executeCommand", () => {
 
     const result = executeCommand(runtime)
 
+    if (result.isErr()) {
+      console.error("Install command failed:", result.error)
+    }
+
     expect(result.isOk()).toBe(true)
     if (result.isOk()) {
       expect(result.value.success).toBe(true)
@@ -185,7 +189,7 @@ describe("executeCommand", () => {
     expect(result.isOk()).toBe(true)
     if (result.isOk()) {
       expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Would unload 1 sideloads")
+      expect(result.value.message).toContain("Successfully unloaded 1 sideloads")
       expect(result.value.changes).toHaveLength(1)
     }
   })

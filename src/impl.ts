@@ -1,6 +1,7 @@
 import { Result, ok, err } from "neverthrow"
 import * as path from "path"
 import * as child_process from "child_process"
+import * as fs from "fs"
 import dedent from "dedent"
 import {
   Runtime,
@@ -278,22 +279,93 @@ function executeInstall(
   const validateElmJsonExists = (): Result<void, CommandError> =>
     runtime.environment.hasElmJson ? ok(undefined) : err("noElmJsonFound")
 
-  const createChanges = (config: SideloadConfig): AppliedChange[] =>
-    config.sideloads.map((sideload) => ({
-      packageName: sideload.originalPackageName,
-      action: "sideloaded" as const,
-      source:
-        sideload.sideloadedPackage.type === "github" ? sideload.sideloadedPackage.url : sideload.sideloadedPackage.path,
-    }))
+  const ensureCacheDirectory = (): Result<string, CommandError> => {
+    const cacheDir = path.join(runtime.environment.cwd, ".elm.sideload.cache")
+    return runtime.fileSystem.mkdir(cacheDir).map(() => cacheDir)
+  }
 
-  const createResult = (config: SideloadConfig): ExecutionResult => ({
+  const installSideload = (
+    sideload: SideloadRegistration,
+    cacheDir: string,
+    elmHomePackagesPath: string
+  ): Result<AppliedChange, CommandError> => {
+    const { originalPackageName, originalPackageVersion, sideloadedPackage } = sideload
+
+    switch (sideloadedPackage.type) {
+      case "github":
+        return cloneRepository(sideloadedPackage.url, sideloadedPackage.pinTo.sha, cacheDir)
+          .andThen((clonedPath) =>
+            copyPackageToElmHome(clonedPath, originalPackageName, originalPackageVersion, elmHomePackagesPath)
+          )
+          .map(() => ({
+            packageName: originalPackageName,
+            action: "sideloaded" as const,
+            source: sideloadedPackage.url,
+          }))
+
+      case "relative":
+        const sourcePath = path.resolve(runtime.environment.cwd, sideloadedPackage.path)
+        return copyPackageToElmHome(sourcePath, originalPackageName, originalPackageVersion, elmHomePackagesPath).map(
+          () => ({
+            packageName: originalPackageName,
+            action: "sideloaded" as const,
+            source: sideloadedPackage.path,
+          })
+        )
+
+      default:
+        const _: never = sideloadedPackage
+        return err("invalidSideloadConfig")
+    }
+  }
+
+  const performInstallation = (
+    config: SideloadConfig,
+    cacheDir: string,
+    elmHomePackagesPath: string
+  ): Result<AppliedChange[], CommandError> => {
+    const changes: AppliedChange[] = []
+
+    for (const sideload of config.sideloads) {
+      const result = installSideload(sideload, cacheDir, elmHomePackagesPath)
+      if (result.isErr()) {
+        return err(result.error)
+      }
+      changes.push(result.value)
+    }
+
+    return ok(changes)
+  }
+
+  const createResult = (changes: AppliedChange[]): ExecutionResult => ({
     success: true,
-    message: `Would install ${config.sideloads.length} sideloads (${mode} mode)`,
-    changes: createChanges(config),
+    message:
+      mode === "dry-run"
+        ? `Would install ${changes.length} sideloads (dry-run mode)`
+        : `Successfully installed ${changes.length} sideloads`,
+    changes,
   })
 
   return validateElmJsonExists()
     .andThen(() => loadSideloadConfig(runtime))
+    .andThen((config) =>
+      getElmHomePackagesPath(runtime, config).andThen((elmHomePackagesPath) =>
+        ensureCacheDirectory().andThen((cacheDir) =>
+          mode === "dry-run"
+            ? ok(
+                config.sideloads.map((sideload) => ({
+                  packageName: sideload.originalPackageName,
+                  action: "sideloaded" as const,
+                  source:
+                    sideload.sideloadedPackage.type === "github"
+                      ? sideload.sideloadedPackage.url
+                      : sideload.sideloadedPackage.path,
+                }))
+              )
+            : performInstallation(config, cacheDir, elmHomePackagesPath)
+        )
+      )
+    )
     .map(createResult)
 }
 
@@ -302,26 +374,66 @@ function executeInstall(
 // =============================================================================
 
 function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> {
-  // Load sideload config
-  const configResult = loadSideloadConfig(runtime)
-  if (configResult.isErr()) {
-    return err(configResult.error)
+  const removeSideloadedPackage = (
+    packageName: string,
+    version: string,
+    elmHomePackagesPath: string
+  ): Result<AppliedChange, CommandError> => {
+    try {
+      const [author, name] = packageName.split("/")
+      if (!author || !name) {
+        return err("invalidPackageName")
+      }
+
+      const packageDir = path.join(elmHomePackagesPath, author, name, version)
+
+      if (fs.existsSync(packageDir)) {
+        fs.rmSync(packageDir, { recursive: true, force: true })
+      }
+
+      return ok({
+        packageName,
+        action: "restored" as const,
+        source: "official package repository",
+      })
+    } catch (error) {
+      console.error(`Failed to remove package ${packageName}:`, error)
+      return err("packageCopyFailed")
+    }
   }
 
-  const config = configResult.value
+  const performUnload = (
+    config: SideloadConfig,
+    elmHomePackagesPath: string
+  ): Result<AppliedChange[], CommandError> => {
+    const changes: AppliedChange[] = []
 
-  // For now, just return success with a placeholder message
-  const changes: AppliedChange[] = config.sideloads.map((sideload) => ({
-    packageName: sideload.originalPackageName,
-    action: "restored" as const,
-    source: "official package repository",
-  }))
+    for (const sideload of config.sideloads) {
+      const result = removeSideloadedPackage(
+        sideload.originalPackageName,
+        sideload.originalPackageVersion,
+        elmHomePackagesPath
+      )
+      if (result.isErr()) {
+        return err(result.error)
+      }
+      changes.push(result.value)
+    }
 
-  return ok({
-    success: true,
-    message: `Would unload ${config.sideloads.length} sideloads`,
-    changes,
-  })
+    return ok(changes)
+  }
+
+  return loadSideloadConfig(runtime)
+    .andThen((config) =>
+      getElmHomePackagesPath(runtime, config).andThen((elmHomePackagesPath) =>
+        performUnload(config, elmHomePackagesPath)
+      )
+    )
+    .map((changes) => ({
+      success: true,
+      message: `Successfully unloaded ${changes.length} sideloads`,
+      changes,
+    }))
 }
 
 // =============================================================================
@@ -373,6 +485,122 @@ function resolveInputToSource(input: ConfigureInput): Result<ConfigureSource, Co
       const _: never = input
       throw new Error(`Unhandled ConfigureInput type: ${(input as any).type}`)
   }
+}
+
+function cloneRepository(url: string, sha: string, cacheDir: string): Result<string, CommandError> {
+  try {
+    // Create unique directory name based on URL and SHA
+    const repoName = path.basename(url, ".git")
+    const cloneDir = path.join(cacheDir, `${repoName}-${sha.substring(0, 8)}`)
+
+    // Clean up existing directory if it exists
+    if (fs.existsSync(cloneDir)) {
+      fs.rmSync(cloneDir, { recursive: true, force: true })
+    }
+
+    // Clone the repository
+    child_process.execSync(`git clone ${url} ${cloneDir}`, {
+      stdio: "pipe",
+      encoding: "utf8",
+    })
+
+    // Checkout the specific SHA
+    child_process.execSync(`git checkout ${sha}`, {
+      cwd: cloneDir,
+      stdio: "pipe",
+      encoding: "utf8",
+    })
+
+    return ok(cloneDir)
+  } catch (error) {
+    console.error(`Failed to clone repository ${url} at SHA ${sha}:`, error)
+    return err("gitCloneFailed")
+  }
+}
+
+function copyPackageToElmHome(
+  sourcePath: string,
+  packageName: string,
+  version: string,
+  elmHomePackagesPath: string
+): Result<string, CommandError> {
+  try {
+    const [author, name] = packageName.split("/")
+    if (!author || !name) {
+      return err("invalidPackageName")
+    }
+
+    const targetDir = path.join(elmHomePackagesPath, author, name, version)
+
+    // Create target directory
+    fs.mkdirSync(targetDir, { recursive: true })
+
+    // Copy all files from source to target
+    copyDirectoryRecursive(sourcePath, targetDir)
+
+    return ok(targetDir)
+  } catch (error) {
+    console.error(`Failed to copy package ${packageName} to ELM_HOME:`, error)
+    return err("packageCopyFailed")
+  }
+}
+
+function copyDirectoryRecursive(source: string, target: string): void {
+  if (!fs.existsSync(source)) {
+    throw new Error(`Source directory does not exist: ${source}`)
+  }
+
+  fs.mkdirSync(target, { recursive: true })
+
+  const items = fs.readdirSync(source)
+  for (const item of items) {
+    const sourcePath = path.join(source, item)
+    const targetPath = path.join(target, item)
+
+    if (fs.statSync(sourcePath).isDirectory()) {
+      copyDirectoryRecursive(sourcePath, targetPath)
+    } else {
+      fs.copyFileSync(sourcePath, targetPath)
+    }
+  }
+}
+
+function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Result<string, CommandError> {
+  // Check if custom elmHomePackagesPath is configured
+  if (config.elmHomePackagesPath) {
+    switch (config.elmHomePackagesPath.type) {
+      case "relative":
+        return ok(path.resolve(runtime.environment.cwd, config.elmHomePackagesPath.path))
+      case "absolute":
+        return ok(config.elmHomePackagesPath.path)
+      case "requireElmHome":
+        return runtime.environment.elmHome
+          ? ok(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
+          : err("noElmHome")
+      default:
+        const _: never = config.elmHomePackagesPath
+        return err("invalidSideloadConfig")
+    }
+  }
+
+  // Default: use ELM_HOME if available, otherwise use default path
+  const elmHome = runtime.environment.elmHome
+  if (elmHome) {
+    return ok(path.join(elmHome, "0.19.1", "packages"))
+  }
+
+  // Default ELM_HOME location based on OS
+  const os = require("os")
+  const platform = os.platform()
+
+  let defaultElmHome: string
+  if (platform === "win32") {
+    defaultElmHome = path.join(os.homedir(), "AppData", "Roaming", "elm")
+  } else {
+    defaultElmHome = path.join(os.homedir(), ".elm")
+  }
+
+  return ok(path.join(defaultElmHome, "0.19.1", "packages"))
 }
 
 // =============================================================================

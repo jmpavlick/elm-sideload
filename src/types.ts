@@ -121,6 +121,9 @@ export type ValidationError =
   | "sideloadConfigNotFound"
   | "invalidSideloadConfig"
   | "couldNotReadElmJson"
+  | "gitCloneFailed"
+  | "invalidPackageName"
+  | "packageCopyFailed"
 
 export type RuntimeError = "noElmHome" | "couldNotCreateRuntime" | "invalidArguments"
 
