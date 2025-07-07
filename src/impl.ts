@@ -1,5 +1,6 @@
 import { Result, ok, err } from "neverthrow"
 import * as path from "path"
+import * as child_process from "child_process"
 import dedent from "dedent"
 import {
   Runtime,
@@ -12,6 +13,7 @@ import {
   FileError,
   SideloadRegistration,
   AppliedChange,
+  ConfigureInput,
   ConfigureSource,
 } from "./types"
 
@@ -210,7 +212,7 @@ function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
 function executeConfigure(
   runtime: Runtime,
   packageName: string,
-  source: ConfigureSource
+  source: ConfigureInput
 ): Result<ExecutionResult, CommandError> {
   const validatePackageInElmJson = (elmJson: ElmJson): Result<ElmJson, CommandError> =>
     checkPackageInElmJson(elmJson, packageName) ? ok(elmJson) : err("packageNotFoundInElmJson")
@@ -223,7 +225,11 @@ function executeConfigure(
       })
     )
 
-  const createRegistration = (elmJson: ElmJson, config: SideloadConfig): Result<SideloadConfig, CommandError> => {
+  const createRegistration = (
+    elmJson: ElmJson,
+    config: SideloadConfig,
+    resolvedSource: ConfigureSource
+  ): Result<SideloadConfig, CommandError> => {
     const packageVersion = getPackageVersion(elmJson, packageName)
 
     return packageVersion
@@ -234,7 +240,7 @@ function executeConfigure(
             {
               originalPackageName: packageName,
               originalPackageVersion: packageVersion,
-              sideloadedPackage: source,
+              sideloadedPackage: resolvedSource,
             },
           ],
         })
@@ -251,10 +257,14 @@ function executeConfigure(
     }))
   }
 
-  return loadElmJson(runtime)
-    .andThen(validatePackageInElmJson)
-    .andThen((elmJson) => getOrCreateSideloadConfig().andThen((config) => createRegistration(elmJson, config)))
-    .andThen(saveConfig)
+  return resolveInputToSource(source).andThen((resolvedSource) =>
+    loadElmJson(runtime)
+      .andThen(validatePackageInElmJson)
+      .andThen((elmJson) =>
+        getOrCreateSideloadConfig().andThen((config) => createRegistration(elmJson, config, resolvedSource))
+      )
+      .andThen(saveConfig)
+  )
 }
 
 // =============================================================================
@@ -312,6 +322,57 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
     message: `Would unload ${config.sideloads.length} sideloads`,
     changes,
   })
+}
+
+// =============================================================================
+// Git Operations
+// =============================================================================
+
+function resolveGitReference(url: string, reference: string): Result<string, CommandError> {
+  try {
+    // Use git ls-remote to get the SHA for the branch/tag
+    const command = `git ls-remote ${url} refs/heads/${reference}`
+    const output = child_process.execSync(command, { encoding: "utf8", stdio: "pipe" })
+
+    const lines = output.trim().split("\n")
+    if (lines.length === 0 || !lines[0]) {
+      return err("invalidGithubUrl") // Branch not found
+    }
+
+    const sha = lines[0].split("\t")[0]
+    return sha ? ok(sha) : err("invalidGithubUrl")
+  } catch (error) {
+    console.error(`Git ls-remote failed for ${url}:${reference}`, error)
+    return err("invalidGithubUrl")
+  }
+}
+
+function resolveInputToSource(input: ConfigureInput): Result<ConfigureSource, CommandError> {
+  switch (input.type) {
+    case "relative":
+      return ok(input)
+
+    case "github":
+      if ("sha" in input.pinTo) {
+        // Already has SHA, convert to ConfigureSource type
+        return ok({
+          type: "github" as const,
+          url: input.url,
+          pinTo: { sha: input.pinTo.sha },
+        })
+      } else {
+        // Has branch, resolve to SHA
+        return resolveGitReference(input.url, input.pinTo.branch).map((sha) => ({
+          type: "github" as const,
+          url: input.url,
+          pinTo: { sha },
+        }))
+      }
+
+    default:
+      const _: never = input
+      throw new Error(`Unhandled ConfigureInput type: ${(input as any).type}`)
+  }
 }
 
 // =============================================================================

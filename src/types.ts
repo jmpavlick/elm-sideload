@@ -17,11 +17,17 @@ export type InitCommand = {
 export type ConfigureCommand = {
   type: "configure"
   packageName: string // e.g. "elm/html"
-  source: ConfigureSource
+  source: ConfigureInput
 }
 
-export type ConfigureSource =
+// CLI input types (before resolution)
+export type ConfigureInput =
   | { type: "github"; url: string; pinTo: { branch: string } }
+  | { type: "github"; url: string; pinTo: { sha: string } }
+  | { type: "relative"; path: string }
+
+// Internal storage types (after resolution - SHA only)
+export type ConfigureSource =
   | { type: "github"; url: string; pinTo: { sha: string } }
   | { type: "relative"; path: string }
 
@@ -71,7 +77,6 @@ export type SideloadRegistration = {
 }
 
 export type SideloadSource =
-  | { type: "github"; url: string; pinTo: { branch: string } }
   | { type: "github"; url: string; pinTo: { sha: string } }
   | { type: "relative"; path: string }
 

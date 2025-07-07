@@ -15,7 +15,7 @@ import {
   ConfigureCommand,
   InstallCommand,
   UnloadCommand,
-  ConfigureSource,
+  ConfigureInput,
 } from "./types"
 
 // =============================================================================
@@ -190,7 +190,7 @@ export function parseArgs(argv: string[]): Result<Command, RuntimeError> {
 }
 
 function parseConfigureCommand(packageName: string, options: any): Result<ConfigureCommand, RuntimeError> {
-  let source: ConfigureSource
+  let source: ConfigureInput
 
   if (options.github) {
     if (options.branch) {

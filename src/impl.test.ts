@@ -68,7 +68,7 @@ describe("executeCommand", () => {
     const command: Command = {
       type: "configure",
       packageName: "elm/html",
-      source: { type: "github", url: "https://github.com/lydell/html", pinTo: { branch: "safe" } },
+      source: { type: "github", url: "https://github.com/lydell/html", pinTo: { sha: "abc123def456" } },
     }
 
     const mockElmJson = {
@@ -122,7 +122,7 @@ describe("executeCommand", () => {
         {
           originalPackageName: "elm/html",
           originalPackageVersion: "1.0.0",
-          sideloadedPackage: { type: "github", url: "https://github.com/lydell/html", pinTo: { branch: "safe" } },
+          sideloadedPackage: { type: "github", url: "https://github.com/lydell/html", pinTo: { sha: "abc123def456" } },
         },
       ],
     }
@@ -162,7 +162,7 @@ describe("executeCommand", () => {
         {
           originalPackageName: "elm/html",
           originalPackageVersion: "1.0.0",
-          sideloadedPackage: { type: "github", url: "https://github.com/lydell/html", pinTo: { branch: "safe" } },
+          sideloadedPackage: { type: "github", url: "https://github.com/lydell/html", pinTo: { sha: "abc123def456" } },
         },
       ],
     }

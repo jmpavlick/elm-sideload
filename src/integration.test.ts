@@ -151,5 +151,11 @@ describe("Integration Test: elm-sideload end-to-end", () => {
     expect(sideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
     expect(sideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
     expect(sideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
+
+    // Verify that the branch was resolved to a SHA
+    const pinTo = sideloadConfig.sideloads[0].sideloadedPackage.pinTo
+    expect(pinTo).toHaveProperty("sha")
+    expect(pinTo.sha).toMatch(/^[a-f0-9]{40}$/) // SHA should be 40 hex characters
+    expect(pinTo).not.toHaveProperty("branch") // Should not have branch anymore
   }, 30000) // 30 second timeout for this integration test
 })
