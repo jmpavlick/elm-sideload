@@ -226,16 +226,71 @@ const tests = (
     [() => compiler.make],
     (env) => {
       const { getCompiledOutput } = env
-
       // if this call succeeds, we were able to run the compiler and read the compiled output back in
       const _ = getCompiledOutput()
     },
   ],
   [
-    "init should succeed",
+    "help command should work",
     [() => "elm-sideload"],
     (env) => {
-      const { getSideloadConfig } = env
+      throw new Error("TODO: implement help command test")
+    },
+  ],
+  [
+    "init command should work",
+    [() => "elm-sideload init"],
+    (env) => {
+      throw new Error("TODO: implement init command test")
+    },
+  ],
+  [
+    "configure command with github branch should work",
+    [() => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe"],
+    (env) => {
+      throw new Error("TODO: implement configure github branch test")
+    },
+  ],
+  [
+    "configure command with github sha should work",
+    [() => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha abc123"],
+    (env) => {
+      throw new Error("TODO: implement configure github sha test")
+    },
+  ],
+  [
+    "configure command with relative path should work",
+    [() => "elm-sideload configure elm/virtual-dom --relative ./local-package"],
+    (env) => {
+      throw new Error("TODO: implement configure relative test")
+    },
+  ],
+  [
+    "install command interactive should work",
+    [() => "elm-sideload install"],
+    (env) => {
+      throw new Error("TODO: implement install interactive test")
+    },
+  ],
+  [
+    "install command always should work",
+    [() => "elm-sideload install --always"],
+    (env) => {
+      throw new Error("TODO: implement install always test")
+    },
+  ],
+  [
+    "install command dry-run should work",
+    [() => "elm-sideload install --dry-run"],
+    (env) => {
+      throw new Error("TODO: implement install dry-run test")
+    },
+  ],
+  [
+    "unload command should work",
+    [() => "elm-sideload unload"],
+    (env) => {
+      throw new Error("TODO: implement unload test")
     },
   ],
 ]
