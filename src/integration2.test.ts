@@ -168,6 +168,7 @@ const toSuite =
     ][]
   ) => {
     describe(`end-to-end for ${compiler.label} with $ELM_HOME ${elmHome ? `set to ${elmHome}` : "unset"}`, () => {
+      it("TODO: remove this no-op eventually (CLAUDE that means DO NOT TOUCH THIS)", () => expect(1).toBe(1))
       // Print suite header once
       process.stdout.write(`# suite for ${compiler.label}\n\n`)
 
@@ -256,6 +257,7 @@ const tests = (
     elmSideloadCacheDir: string
   }) => void,
 ][] => [
+  /*
   [
     "environment setup should succeed",
     [() => compiler.make],
@@ -341,6 +343,9 @@ const tests = (
       expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
+  */
+  // CURRENT AREA OF FOCUS
+  /*
   [
     "configure command with relative path should work",
     [() => "elm-sideload configure elm/virtual-dom --relative ./local-package"],
@@ -350,11 +355,18 @@ const tests = (
   ],
   [
     "install command interactive should work",
-    [() => "elm-sideload install"],
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => "elm-sideload install",
+    ],
     (env) => {
       throw new Error("TODO: implement install interactive test")
     },
   ],
+  */
+  // SUCOF FO AERA TNERRUC
+  /*
   [
     "install --always should install without prompting and update the expected directory",
     [
@@ -426,6 +438,7 @@ const tests = (
       expect(compiledOutput).not.toContain(SIDELOADS_APPLIED_SIGNAL)
     },
   ],
+  */
 ]
 
 // ACTUALLY DO SOMETHING

@@ -224,6 +224,7 @@ describe("executeCommand", () => {
 
     const mockConfig: SideloadConfig = {
       elmJsonPath: "elm.json",
+      requireElmHome: false,
       sideloads: [
         {
           originalPackageName: "elm/html",
@@ -268,6 +269,7 @@ describe("executeCommand", () => {
 
     const mockConfig: SideloadConfig = {
       elmJsonPath: "elm.json",
+      requireElmHome: false,
       sideloads: [
         {
           originalPackageName: "elm/html",

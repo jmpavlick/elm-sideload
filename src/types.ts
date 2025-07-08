@@ -67,7 +67,7 @@ export interface Environment {
 
 export type SideloadConfig = {
   elmJsonPath: string
-  elmHomePackagesPath?: { type: "relative"; path: string } | { type: "requireElmHome"; value: true }
+  requireElmHome: boolean
   sideloads: SideloadRegistration[]
 }
 

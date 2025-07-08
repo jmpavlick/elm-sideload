@@ -1,4 +1,4 @@
-import { Result, ok, err } from "neverthrow"
+import { Result, ResultAsync, ok, err } from "neverthrow"
 import { type GitIO, type Error as GitIOError } from "./gitIO"
 import * as path from "path"
 import * as child_process from "child_process"
@@ -29,8 +29,11 @@ getting help:
 getting started:
 
   elm-sideload init
-      Creates your 'elm.sideload.json', and configures necessary filepaths, creates a folder '.elm.sideload.cache' in your working directory,
+      INTERACTIVELY creates your 'elm.sideload.json', and configures necessary filepaths, creates a folder '.elm.sideload.cache' in your working directory,
       and attempts to add the '.elm.sideload.cache' folder to your '.gitignore'.
+
+      elm-sideload init will tell you whether or not your current shell has an $ELM_HOME set, and if so, what it is; it will then prompt you to configure
+      whether or not elm-sideload install should require $ELM_HOME to be set or not.
 
       If you already have an 'elm.sideload.json', this command will signal adversity and exit.
 
@@ -67,9 +70,8 @@ applying your sideload configuration:
           - If you have an '$ELM_HOME' set, print its value
           - If you do _not_ have an '$ELM_HOME' set, print the value of the directory that it intends to write to
         - Check for the 'elm.json' in your 'elm.sideload.json'; if it does not exist, it will signal adversity and exit
-        - If you have set an 'elmHomePackagesPath' in your 'elm.sideload.json':
-          - For 'relative', it will ensure that the target directory exists _and_ is writable; if not, it will signal adversity and exit
-          - For 'requireElmHome: true', it will use the default path as constructed from '$ELM_HOME'; if you set 'requireElmHome: true' and
+        - If you have set 'requireElmHome: true' in your 'elm.sideload.json':
+          - It will use the path as constructed from '$ELM_HOME'; if you set 'requireElmHome: true' and
             the program runs in a shell without '$ELM_HOME' set, it will signal adversity and exit.
         - If the program is still running at this point, IT WILL ASK YOU TO CONFIRM! that you DO IN FACT want to overwrite the target packages
           with your sideloads. It will time out, signal adversity, and exit if a response is not provided quickly enough.
@@ -148,6 +150,7 @@ function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
 
   const createDefaultConfig = (): SideloadConfig => ({
     elmJsonPath: "elm.json",
+    requireElmHome: false,
     sideloads: [],
   })
 
@@ -195,6 +198,7 @@ function executeConfigure(
     loadSideloadConfig(runtime).orElse(() =>
       ok({
         elmJsonPath: "elm.json",
+        requireElmHome: false,
         sideloads: [],
       })
     )
@@ -584,19 +588,11 @@ function copyDirectoryRecursive(source: string, target: string): void {
 }
 
 function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Result<string, CommandError> {
-  // Check if custom elmHomePackagesPath is configured
-  if (config.elmHomePackagesPath) {
-    switch (config.elmHomePackagesPath.type) {
-      case "relative":
-        return ok(path.resolve(runtime.environment.cwd, config.elmHomePackagesPath.path))
-      case "requireElmHome":
-        return runtime.environment.elmHome
-          ? ok(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
-          : err("noElmHome")
-      default:
-        const _: never = config.elmHomePackagesPath
-        return err("invalidSideloadConfig")
-    }
+  // Check if requireElmHome is configured
+  if (config.requireElmHome) {
+    return runtime.environment.elmHome
+      ? ok(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
+      : err("noElmHome")
   }
 
   // Default: use `$ELM_HOME` if available, otherwise use default path (defined in the compiler, re-created here)
