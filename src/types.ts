@@ -62,8 +62,6 @@ export interface Environment {
   cwd: string
   hasElmJson: boolean
   hasSideloadConfig: boolean
-  getEnv: (key: string) => string | undefined
-  setEnv: (key: string, value: string | undefined) => void
 }
 
 // =============================================================================

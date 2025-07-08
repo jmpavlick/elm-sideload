@@ -483,7 +483,7 @@ const customElmHome = path.join(os.tmpdir(), "elm-sideload-test", "elm-home")
 // ACTUALLY DO SOMETHING
 compilers.forEach((compiler) => {
   // set `process.env.ELM_HOME` to empty
-  process.env.ELM_HOME = undefined
+  delete process.env.ELM_HOME
   // clear compiler's dir
   const compilerTestOutputDir = path.join(TEST_OUTPUT_DIR, compiler.label)
   if (fs.existsSync(compilerTestOutputDir)) {
