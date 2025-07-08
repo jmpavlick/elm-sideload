@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect, beforeAll } from "vitest"
 import { execSync } from "child_process"
 import * as fs from "fs"
 import * as path from "path"
@@ -71,30 +71,26 @@ type TestEnvironment = {
 
 function createTestEnvironment(testName?: string): TestEnvironment {
   const originalCwd = process.cwd()
-  const tempDirName = testName ? `.temp-${testName}` : ".temp"
-  const tempDir = path.join(originalCwd, tempDirName)
+  const tempDirName = testName ? `${testName}` : "default"
+  const tempDir = path.join(originalCwd, ".test", tempDirName)
   const cliPath = path.join(originalCwd, "dist")
   const elmHome = path.join(os.homedir(), ".elm")
 
   return { tempDir, originalCwd, cliPath, elmHome }
 }
 
-function setupTestEnvironment(env: TestEnvironment): void {
-  // Clean up any existing temp directory
-  if (fs.existsSync(env.tempDir)) {
-    fs.rmSync(env.tempDir, { recursive: true, force: true })
+function cleanupAllTestEnvironments(): void {
+  const testBaseDir = path.join(process.cwd(), ".test")
+  if (fs.existsSync(testBaseDir)) {
+    fs.rmSync(testBaseDir, { recursive: true, force: true })
+    console.log(`Cleaned up all test environments in: ${testBaseDir}`)
   }
-
-  // Create fresh temp directory
-  fs.mkdirSync(env.tempDir, { recursive: true })
-  console.log(`Created temp directory: ${env.tempDir}`)
 }
 
-function cleanupTestEnvironment(env: TestEnvironment): void {
-  // Clean up temp directory
-  if (fs.existsSync(env.tempDir)) {
-    fs.rmSync(env.tempDir, { recursive: true, force: true })
-  }
+function setupTestEnvironment(env: TestEnvironment): void {
+  // Create fresh test directory (will be preserved after tests)
+  fs.mkdirSync(env.tempDir, { recursive: true })
+  console.log(`Created test directory: ${env.tempDir}`)
 }
 
 // =============================================================================
@@ -218,6 +214,9 @@ describe("Integration Test: elm-sideload end-to-end", () => {
   beforeAll(() => {
     globalEnv = createTestEnvironment()
 
+    // Clean up any existing test environments before starting
+    cleanupAllTestEnvironments()
+
     // Build our CLI first
     console.log("Building CLI...")
     execSync("npm run build", { cwd: globalEnv.originalCwd })
@@ -245,8 +244,9 @@ describe("Integration Test: elm-sideload end-to-end", () => {
       expect(pinTo).toHaveProperty("sha")
       expect(pinTo.sha).toMatch(/^[a-f0-9]{40}$/) // SHA should be 40 hex characters
       expect(pinTo).not.toHaveProperty("branch") // Should not have branch anymore
-    } finally {
-      cleanupTestEnvironment(env)
+    } catch (error) {
+      console.error(`Test failed in directory: ${env.tempDir}`)
+      throw error
     }
   }, 30000)
 
@@ -287,8 +287,9 @@ describe("Integration Test: elm-sideload end-to-end", () => {
 
       // Verify package was removed from ELM_HOME
       expect(fileExists(packagePath)).toBe(false)
-    } finally {
-      cleanupTestEnvironment(env)
+    } catch (error) {
+      console.error(`Test failed in directory: ${env.tempDir}`)
+      throw error
     }
   }, 60000) // Longer timeout for full cycle
 })

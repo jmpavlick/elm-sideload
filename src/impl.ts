@@ -230,6 +230,21 @@ function executeInstall(
     return ok(changes)
   }
 
+  const bustElmCache = (): Result<void, CommandError> => {
+    const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", "0.19.1")
+
+    try {
+      if (fs.existsSync(elmStuffPath)) {
+        console.log("Deleting elm-stuff/0.19.1 to bust compilation cache...")
+        fs.rmSync(elmStuffPath, { recursive: true, force: true })
+      }
+      return ok(undefined)
+    } catch (error) {
+      console.error(`Failed to delete elm-stuff cache:`, error)
+      return err("writeError")
+    }
+  }
+
   const createResult = (changes: AppliedChange[]): ExecutionResult => ({
     success: true,
     message:
@@ -255,7 +270,7 @@ function executeInstall(
                       : sideload.sideloadedPackage.path,
                 }))
               )
-            : performInstallation(config, cacheDir, elmHomePackagesPath)
+            : bustElmCache().andThen(() => performInstallation(config, cacheDir, elmHomePackagesPath))
         )
       )
     )
