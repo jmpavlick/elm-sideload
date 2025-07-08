@@ -428,4 +428,13 @@ const tests = (
 ]
 
 // ACTUALLY DO SOMETHING
-compilers.forEach((compiler) => toSuite(compiler)(tests))
+compilers.forEach((compiler) => {
+  // clear compiler's dir
+  const compilerTestOutputDir = path.join(TEST_OUTPUT_DIR, compiler.label)
+  if (fs.existsSync(compilerTestOutputDir)) {
+    fs.rmdirSync(compilerTestOutputDir)
+  }
+  fs.mkdirSync(compilerTestOutputDir, { recursive: true })
+
+  toSuite(compiler)(tests)
+})
