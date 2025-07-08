@@ -81,7 +81,7 @@ const toRunCmd = (workDir: string, logFile: string, elmHome?: string) => (comman
   // Build environment for subprocess
   const subprocessEnv: NodeJS.ProcessEnv = { ...process.env, PATH: `${DIST}:${process.env.PATH}` }
   if (elmHome) {
-    subprocessEnv.ELM_HOME = elmHome
+    //subprocessEnv.ELM_HOME = elmHome
   }
 
   const commandOutput = execSync(executableCommand, {
@@ -479,6 +479,7 @@ const tests = (
 ]
 
 const customElmHome = path.join(os.tmpdir(), "elm-sideload-test", "elm-home")
+fs.mkdirSync(customElmHome, { recursive: true })
 
 // ACTUALLY DO SOMETHING
 compilers.forEach((compiler) => {
@@ -492,5 +493,5 @@ compilers.forEach((compiler) => {
   fs.mkdirSync(compilerTestOutputDir, { recursive: true })
 
   toSuite(compiler)(tests)
-  toSuite(compiler, customElmHome)(tests)
+  toSuite({ ...compiler, label: compiler.label + "CUSTOM_ELM_HOME_" }, customElmHome)(tests)
 })
