@@ -536,41 +536,58 @@ function copyPackageToElmHome(
   }
 
   const targetDir = path.join(elmHomePackagesPath, author, name, version)
+  console.log(`Copying ${sourcePath} to ${targetDir}`)
 
   // Create target directory and copy all files from source to target
-  return runtime.fileSystem
-    .mkdir(targetDir)
-    .andThen(() => runtime.fileSystem.copyDirectoryRecursive(sourcePath, targetDir))
-    .map(() => targetDir)
-    .mapErr(() => "packageCopyFailed" as const)
+  return (
+    runtime.fileSystem
+      // cache-bust the target by deleting `artifacts.dat...`
+      .deleteFile(path.join(targetDir, "artifacts.dat"))
+      .orElse(() => okAsync())
+      // ... or by deleting `artifacts.x.dat for the lamdera compiler`
+      .andThen(() => runtime.fileSystem.deleteFile(path.join(targetDir, "artifacts.x.dat")))
+      .orElse(() => okAsync())
+      .andThen(() => runtime.fileSystem.mkdir(targetDir))
+      .andThen(() => runtime.fileSystem.copyDirectoryRecursive(sourcePath, targetDir))
+      .andThen(() => runtime.fileSystem.writeFile(path.join(targetDir, ".elm-sideload"), ""))
+      .map(() => targetDir)
+      .mapErr(() => "packageCopyFailed" as const)
+  )
 }
 
-function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
-  // Check if requireElmHome is configured
-  if (config.requireElmHome) {
-    return runtime.environment.elmHome
-      ? okAsync(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
-      : errAsync("noElmHome")
-  }
-
-  // Default: use `$ELM_HOME` if available, otherwise use default path (defined in the compiler, re-created here)
-  const elmHome = runtime.environment.elmHome
-  if (elmHome) {
-    return okAsync(path.join(elmHome, "0.19.1", "packages"))
-  }
-
-  // Default ELM_HOME location based on OS
+function getDefaultElmHome(): string {
   const os = require("os")
   const platform = os.platform()
 
-  let defaultElmHome: string
   if (platform === "win32") {
-    defaultElmHome = path.join(os.homedir(), "AppData", "Roaming", "elm")
+    return path.join(os.homedir(), "AppData", "Roaming", "elm")
   } else {
-    defaultElmHome = path.join(os.homedir(), ".elm")
+    return path.join(os.homedir(), ".elm")
   }
+}
 
-  return okAsync(path.join(defaultElmHome, "0.19.1", "packages"))
+function getElmHomePath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
+  const envElmHome = runtime.environment.getEnv("ELM_HOME")
+
+  if (envElmHome) {
+    return runtime.fileSystem.exists(envElmHome).andThen((exists) => {
+      if (exists) {
+        return okAsync(envElmHome)
+      } else {
+        return errAsync("elmHomePathNotFound" as const)
+      }
+    })
+  } else {
+    if (config.requireElmHome) {
+      return errAsync("noElmHome" as const)
+    } else {
+      return okAsync(getDefaultElmHome())
+    }
+  }
+}
+
+function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
+  return getElmHomePath(runtime, config).map((elmHome) => path.join(elmHome, "0.19.1", "packages"))
 }
 
 // =============================================================================

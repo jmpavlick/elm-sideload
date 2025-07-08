@@ -62,7 +62,13 @@ const realFileSystem: FileSystemAdapter = {
   },
 
   copyDirectoryRecursive: (source: string, target: string) => {
-    return ResultAsync.fromPromise(fsAsync.cp(source, target, { recursive: true }), () => "copyError" as const)
+    return ResultAsync.fromPromise(
+      fsAsync.cp(source, target, {
+        recursive: true,
+        filter: (src) => !path.basename(src).startsWith(".git"),
+      }),
+      () => "copyError" as const
+    )
   },
 }
 

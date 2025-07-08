@@ -143,6 +143,7 @@ export type ValidationError =
   | "gitCloneFailed"
   | "invalidPackageName"
   | "packageCopyFailed"
+  | "elmHomePathNotFound"
 
 export type RuntimeError = "noElmHome" | "couldNotCreateRuntime" | "invalidArguments" | "gitNotAvailable"
 
