@@ -70,12 +70,16 @@ applying your sideload configuration:
         - If you have set 'requireElmHome: true' in your 'elm.sideload.json':
           - It will use the path as constructed from '$ELM_HOME'; if you set 'requireElmHome: true' and
             the program runs in a shell without '$ELM_HOME' set, it will signal adversity and exit.
+        - Verify sideloads:
+          - Download any remote sideloaded packages that are not yet in '.elm.sideload.cache' and validate that versions matching the SHAs
+            in your elm.sideload.config are available
+          - For 'relative' packages, ensure that the references are present in their directories and ensure that they are well-formed (i.e., Elm packages with an 'elm.json' in the referenced directory)
+          - This step will perform all validations and fail if any of these dependencies are not available
         - If the program is still running at this point, IT WILL ASK YOU TO CONFIRM! that you DO IN FACT want to overwrite the target packages
           with your sideloads. It will time out, signal adversity, and exit if a response is not provided quickly enough.
           - If you intentionally decline, the program will exit signaling success.
           - If you accept, the program will continue.
         - The program will then:
-          - Download any sideloaded packages that are not yet in '.elm.sideload.cache'
           - Apply all cached sideloaded packages
           - Print a summary of the packages that it changed
         - If any of your sideloads:
