@@ -1,8 +1,9 @@
 import { Command as CommanderCommand } from "commander"
-import { Result, ok, err } from "neverthrow"
+import { Result, ResultAsync, ok, err } from "neverthrow"
 import * as os from "os"
 import * as path from "path"
 import * as fs from "fs"
+import { promises as fsAsync } from "fs"
 import { createGitIO } from "./gitIO"
 import {
   Command,
@@ -25,60 +26,41 @@ import {
 
 const realFileSystem: FileSystemAdapter = {
   readFile: (path: string) => {
-    try {
-      const content = fs.readFileSync(path, "utf8")
-      return ok(content)
-    } catch (error) {
+    return ResultAsync.fromPromise(fsAsync.readFile(path, "utf8"), (error: any) => {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return err("fileNotFound")
+        return "fileNotFound" as const
       }
-      return err("readError")
-    }
+      return "readError" as const
+    })
   },
 
   writeFile: (path: string, content: string) => {
-    try {
-      fs.writeFileSync(path, content, "utf8")
-      return ok(undefined)
-    } catch (error) {
-      return err("writeError")
-    }
+    return ResultAsync.fromPromise(fsAsync.writeFile(path, content, "utf8"), () => "writeError" as const)
   },
 
   exists: (path: string) => {
-    try {
-      const exists = fs.existsSync(path)
-      return ok(exists)
-    } catch (error) {
-      return err("readError")
-    }
+    return ResultAsync.fromPromise(
+      fsAsync.access(path).then(() => true),
+      () => false
+    ).orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false)))
   },
 
   mkdir: (path: string) => {
-    try {
-      fs.mkdirSync(path, { recursive: true })
-      return ok(undefined)
-    } catch (error) {
-      return err("writeError")
-    }
+    return ResultAsync.fromPromise(fsAsync.mkdir(path, { recursive: true }), () => "writeError" as const).map(
+      () => undefined
+    )
   },
 
   deleteFile: (path: string) => {
-    try {
-      fs.unlinkSync(path)
-      return ok(undefined)
-    } catch (error) {
-      return err("writeError")
-    }
+    return ResultAsync.fromPromise(fsAsync.unlink(path), () => "writeError" as const)
   },
 
   deleteDir: (path: string) => {
-    try {
-      fs.rmSync(path, { recursive: true, force: true })
-      return ok(undefined)
-    } catch (error) {
-      return err("writeError")
-    }
+    return ResultAsync.fromPromise(fsAsync.rm(path, { recursive: true, force: true }), () => "writeError" as const)
+  },
+
+  copyDirectoryRecursive: (source: string, target: string) => {
+    return ResultAsync.fromPromise(fsAsync.cp(source, target, { recursive: true }), () => "copyError" as const)
   },
 }
 
@@ -234,19 +216,17 @@ function parseConfigureCommand(packageName: string, options: any): Result<Config
 // Runtime Creation
 // =============================================================================
 
-export function createRuntime(argv: string[]): Result<Runtime, RuntimeError> {
-  return parseArgs(argv).andThen((command) => {
-    const environment = createEnvironment()
-
-    return createGitIO()
+export function createRuntime(argv: string[]): ResultAsync<Runtime, RuntimeError> {
+  return parseArgs(argv).asyncAndThen((command) =>
+    createGitIO()
       .mapErr(() => "gitNotAvailable" as const)
       .map((gitIO) => ({
         command,
-        environment,
+        environment: createEnvironment(),
         fileSystem: realFileSystem,
         gitIO,
       }))
-  })
+  )
 }
 
 // =============================================================================
@@ -275,25 +255,26 @@ export function createTestRuntime(
   }
 
   const defaultFileSystem: FileSystemAdapter = {
-    readFile: () => err("fileNotFound"),
-    writeFile: () => ok(undefined),
-    exists: () => ok(false),
-    mkdir: () => ok(undefined),
-    deleteFile: () => ok(undefined),
-    deleteDir: () => ok(undefined),
+    readFile: () => ResultAsync.fromSafePromise(Promise.reject("fileNotFound")).mapErr(() => "fileNotFound" as const),
+    writeFile: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    exists: () => ResultAsync.fromSafePromise(Promise.resolve(false)),
+    mkdir: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    deleteFile: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    deleteDir: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    copyDirectoryRecursive: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
     ...fileSystem,
   }
 
   // Mock GitIO for testing
   const mockGitIO = {
-    clone: () => ok(undefined),
-    checkout: () => ok(undefined),
-    getCurrentSha: () => ok("abc123"),
-    getRecentCommits: () => ok([]),
-    isClean: () => ok(true),
-    pull: () => ok(undefined),
-    resolveBranchToSha: () => ok("abc123"),
-    shaExists: () => ok(true),
+    clone: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    checkout: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    getCurrentSha: () => ResultAsync.fromSafePromise(Promise.resolve("abc123")),
+    getRecentCommits: () => ResultAsync.fromSafePromise(Promise.resolve([])),
+    isClean: () => ResultAsync.fromSafePromise(Promise.resolve(true)),
+    pull: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
+    resolveBranchToSha: () => ResultAsync.fromSafePromise(Promise.resolve("abc123")),
+    shaExists: () => ResultAsync.fromSafePromise(Promise.resolve(true)),
   }
 
   return {

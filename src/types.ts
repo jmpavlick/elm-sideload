@@ -1,4 +1,4 @@
-import { Result } from "neverthrow"
+import { Result, ResultAsync } from "neverthrow"
 import { type GitIO, type Error as GitIOError } from "./gitIO"
 
 // =============================================================================
@@ -100,19 +100,26 @@ export type ElmJson = {
 // =============================================================================
 
 export type FileSystemAdapter = {
-  readFile: (path: string) => Result<string, FileError>
-  writeFile: (path: string, content: string) => Result<void, FileError>
-  exists: (path: string) => Result<boolean, FileError>
-  mkdir: (path: string) => Result<void, FileError>
-  deleteFile: (path: string) => Result<void, FileError>
-  deleteDir: (path: string) => Result<void, FileError>
+  readFile: (path: string) => ResultAsync<string, FileError>
+  writeFile: (path: string, content: string) => ResultAsync<void, FileError>
+  exists: (path: string) => ResultAsync<boolean, FileError>
+  mkdir: (path: string) => ResultAsync<void, FileError>
+  deleteFile: (path: string) => ResultAsync<void, FileError>
+  deleteDir: (path: string) => ResultAsync<void, FileError>
+  copyDirectoryRecursive: (source: string, target: string) => ResultAsync<void, FileError>
 }
 
 // =============================================================================
 // Error Types
 // =============================================================================
 
-export type FileError = "fileNotFound" | "readError" | "writeError" | "permissionDenied" | "directoryNotFound"
+export type FileError =
+  | "fileNotFound"
+  | "readError"
+  | "writeError"
+  | "permissionDenied"
+  | "directoryNotFound"
+  | "copyError"
 
 export type ValidationError =
   | "noElmJsonFound"
@@ -135,7 +142,6 @@ export type CommandError = FileError | ValidationError | RuntimeError | GitIOErr
 // =============================================================================
 
 export type ExecutionResult = {
-  success: boolean
   message: string
   changes?: AppliedChange[]
 }

@@ -6,32 +6,26 @@ import { executeCommand } from "./impl"
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
 
-  const runtimeResult = createRuntime(argv)
+  await createRuntime(argv)
+    .andThen((runtime) => executeCommand(runtime))
+    .match(
+      (executionResult) => {
+        console.log(executionResult.message)
 
-  if (runtimeResult.isErr()) {
-    console.error(`Error: ${runtimeResult.error}`)
-    process.exit(1)
-  }
+        if (executionResult.changes && executionResult.changes.length > 0) {
+          console.log("\nChanges:")
+          executionResult.changes.forEach((change) => {
+            console.log(`  ${change.packageName}: ${change.action} from ${change.source}`)
+          })
+        }
 
-  const runtime = runtimeResult.value
-  const executionResult = executeCommand(runtime)
-
-  if (executionResult.isErr()) {
-    console.error(`Error: ${executionResult.error}`)
-    process.exit(1)
-  }
-
-  const result = executionResult.value
-  console.log(result.message)
-
-  if (result.changes && result.changes.length > 0) {
-    console.log("\nChanges:")
-    result.changes.forEach((change) => {
-      console.log(`  ${change.packageName}: ${change.action} from ${change.source}`)
-    })
-  }
-
-  process.exit(result.success ? 0 : 1)
+        process.exit(0)
+      },
+      (error) => {
+        console.error(`Error: ${error}`)
+        process.exit(1)
+      }
+    )
 }
 
 // Only run main if this file is executed directly

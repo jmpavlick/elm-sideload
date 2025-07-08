@@ -1,8 +1,6 @@
-import { Result, ResultAsync, ok, err } from "neverthrow"
+import { Result, ResultAsync, ok, err, okAsync, errAsync } from "neverthrow"
 import { type GitIO, type Error as GitIOError } from "./gitIO"
 import * as path from "path"
-import * as child_process from "child_process"
-import * as fs from "fs"
 import {
   Runtime,
   Command,
@@ -104,10 +102,10 @@ undoing your sideload configuration:
 // Main Command Execution
 // =============================================================================
 
-export function executeCommand(runtime: Runtime): Result<ExecutionResult, CommandError> {
+export function executeCommand(runtime: Runtime): ResultAsync<ExecutionResult, CommandError> {
   switch (runtime.command.type) {
     case "help":
-      return ok({
+      return okAsync({
         success: true,
         message: helpText,
       })
@@ -140,13 +138,13 @@ export function executeCommand(runtime: Runtime): Result<ExecutionResult, Comman
 // Init Command
 // =============================================================================
 
-function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
-  const validateInitConditions = (): Result<void, CommandError> =>
+function executeInit(runtime: Runtime): ResultAsync<ExecutionResult, CommandError> {
+  const validateInitConditions = (): ResultAsync<void, CommandError> =>
     runtime.environment.hasSideloadConfig
-      ? err("invalidSideloadConfig")
+      ? errAsync("invalidSideloadConfig")
       : !runtime.environment.hasElmJson
-        ? err("noElmJsonFound")
-        : ok(undefined)
+        ? errAsync("noElmJsonFound")
+        : okAsync(undefined)
 
   const createDefaultConfig = (): SideloadConfig => ({
     elmJsonPath: "elm.json",
@@ -154,13 +152,13 @@ function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
     sideloads: [],
   })
 
-  const writeConfigAndCreateCache = (config: SideloadConfig): Result<ExecutionResult, CommandError> => {
+  const writeConfigAndCreateCache = (config: SideloadConfig): ResultAsync<ExecutionResult, CommandError> => {
     const configPath = path.join(runtime.environment.cwd, "elm.sideload.json")
     const configJson = JSON.stringify(config, null, 2)
     const cachePath = path.join(runtime.environment.cwd, ".elm.sideload.cache")
     const gitignorePath = path.join(runtime.environment.cwd, ".gitignore")
 
-    const addToGitignore = (): Result<void, CommandError> =>
+    const addToGitignore = (): ResultAsync<void, CommandError> =>
       runtime.fileSystem
         .readFile(gitignorePath)
         .map((content) => (content.includes(".elm.sideload.cache") ? content : content + "\n.elm.sideload.cache\n"))
@@ -172,7 +170,6 @@ function executeInit(runtime: Runtime): Result<ExecutionResult, CommandError> {
       .andThen(() => runtime.fileSystem.mkdir(cachePath))
       .andThen(() => addToGitignore())
       .map(() => ({
-        success: true,
         message: `Created elm.sideload.json, .elm.sideload.cache directory, and updated .gitignore`,
       }))
   }
@@ -190,11 +187,11 @@ function executeConfigure(
   runtime: Runtime,
   packageName: string,
   source: ConfigureInput
-): Result<ExecutionResult, CommandError> {
-  const validatePackageInElmJson = (elmJson: ElmJson): Result<ElmJson, CommandError> =>
-    checkPackageInElmJson(elmJson, packageName) ? ok(elmJson) : err("packageNotFoundInElmJson")
+): ResultAsync<ExecutionResult, CommandError> {
+  const validatePackageInElmJson = (elmJson: ElmJson): ResultAsync<ElmJson, CommandError> =>
+    checkPackageInElmJson(elmJson, packageName) ? okAsync(elmJson) : errAsync("packageNotFoundInElmJson")
 
-  const getOrCreateSideloadConfig = (): Result<SideloadConfig, CommandError> =>
+  const getOrCreateSideloadConfig = (): ResultAsync<SideloadConfig, CommandError> =>
     loadSideloadConfig(runtime).orElse(() =>
       ok({
         elmJsonPath: "elm.json",
@@ -225,12 +222,11 @@ function executeConfigure(
       : err("packageNotFoundInElmJson")
   }
 
-  const saveConfig = (config: SideloadConfig): Result<ExecutionResult, CommandError> => {
+  const saveConfig = (config: SideloadConfig): ResultAsync<ExecutionResult, CommandError> => {
     const configPath = path.join(runtime.environment.cwd, "elm.sideload.json")
     const configJson = JSON.stringify(config, null, 2)
 
     return runtime.fileSystem.writeFile(configPath, configJson).map(() => ({
-      success: true,
       message: `Configured sideload for ${packageName}`,
     }))
   }
@@ -252,11 +248,11 @@ function executeConfigure(
 function executeInstall(
   runtime: Runtime,
   mode: "interactive" | "always" | "dry-run"
-): Result<ExecutionResult, CommandError> {
-  const validateElmJsonExists = (): Result<void, CommandError> =>
-    runtime.environment.hasElmJson ? ok(undefined) : err("noElmJsonFound")
+): ResultAsync<ExecutionResult, CommandError> {
+  const validateElmJsonExists = (): ResultAsync<void, CommandError> =>
+    runtime.environment.hasElmJson ? okAsync(undefined) : errAsync("noElmJsonFound")
 
-  const ensureCacheDirectory = (): Result<string, CommandError> => {
+  const ensureCacheDirectory = (): ResultAsync<string, CommandError> => {
     const cacheDir = path.join(runtime.environment.cwd, ".elm.sideload.cache")
     return runtime.fileSystem.mkdir(cacheDir).map(() => cacheDir)
   }
@@ -265,7 +261,7 @@ function executeInstall(
     sideload: SideloadRegistration,
     cacheDir: string,
     elmHomePackagesPath: string
-  ): Result<AppliedChange, CommandError> => {
+  ): ResultAsync<AppliedChange, CommandError> => {
     const { originalPackageName, originalPackageVersion, sideloadedPackage } = sideload
 
     switch (sideloadedPackage.type) {
@@ -276,50 +272,52 @@ function executeInstall(
         const cachedRepoPath = path.join(cacheDir, author, repoName)
 
         // Check if repo is already cached
-        const ensureRepoIsCached = (): Result<string, CommandError> => {
-          if (fs.existsSync(cachedRepoPath)) {
-            // Repo exists, pull latest and checkout SHA
-            return runtime.gitIO
-              .isClean(cachedRepoPath)
-              .andThen((isClean) => {
-                if (!isClean) {
-                  return runtime.gitIO.getRecentCommits(cachedRepoPath, 5).andThen((commits) =>
-                    err({
-                      type: "dirtyRepo",
-                      status: `Repository at ${cachedRepoPath} has uncommitted changes. Recent commits:\n${commits.join("\n")}`,
-                    } as const)
-                  )
-                }
-                return ok(undefined)
-              })
-              .andThen(() => runtime.gitIO.pull(cachedRepoPath))
-              .andThen(() => runtime.gitIO.shaExists(cachedRepoPath, sideloadedPackage.pinTo.sha))
-              .andThen((shaExists) => {
-                if (!shaExists) {
-                  return runtime.gitIO.getRecentCommits(cachedRepoPath, 10).andThen((commits) =>
-                    err({
-                      type: "shaNotFound",
-                      sha: sideloadedPackage.pinTo.sha,
-                      recentCommits: commits,
-                    } as const)
-                  )
-                }
-                return ok(undefined)
-              })
-              .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
-              .map(() => cachedRepoPath)
-          } else {
-            // Repo not cached, clone it
-            return runtime.gitIO
-              .clone(sideloadedPackage.url, cachedRepoPath)
-              .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
-              .map(() => cachedRepoPath)
-          }
+        const ensureRepoIsCached = (): ResultAsync<string, CommandError> => {
+          return runtime.fileSystem.exists(cachedRepoPath).andThen((exists) => {
+            if (exists) {
+              // Repo exists, pull latest and checkout SHA
+              return runtime.gitIO
+                .isClean(cachedRepoPath)
+                .andThen((isClean) => {
+                  if (!isClean) {
+                    return runtime.gitIO.getRecentCommits(cachedRepoPath, 5).andThen((commits) =>
+                      err({
+                        type: "dirtyRepo",
+                        status: `Repository at ${cachedRepoPath} has uncommitted changes. Recent commits:\n${commits.join("\n")}`,
+                      } as const)
+                    )
+                  }
+                  return ok(undefined)
+                })
+                .andThen(() => runtime.gitIO.pull(cachedRepoPath))
+                .andThen(() => runtime.gitIO.shaExists(cachedRepoPath, sideloadedPackage.pinTo.sha))
+                .andThen((shaExists) => {
+                  if (!shaExists) {
+                    return runtime.gitIO.getRecentCommits(cachedRepoPath, 10).andThen((commits) =>
+                      err({
+                        type: "shaNotFound",
+                        sha: sideloadedPackage.pinTo.sha,
+                        recentCommits: commits,
+                      } as const)
+                    )
+                  }
+                  return ok(undefined)
+                })
+                .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
+                .map(() => cachedRepoPath)
+            } else {
+              // Repo not cached, clone it
+              return runtime.gitIO
+                .clone(sideloadedPackage.url, cachedRepoPath)
+                .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
+                .map(() => cachedRepoPath)
+            }
+          })
         }
 
         return ensureRepoIsCached()
           .andThen((clonedPath) =>
-            copyPackageToElmHome(clonedPath, originalPackageName, originalPackageVersion, elmHomePackagesPath)
+            copyPackageToElmHome(runtime, clonedPath, originalPackageName, originalPackageVersion, elmHomePackagesPath)
           )
           .map(() => ({
             packageName: originalPackageName,
@@ -330,17 +328,21 @@ function executeInstall(
 
       case "relative":
         const sourcePath = path.resolve(runtime.environment.cwd, sideloadedPackage.path)
-        return copyPackageToElmHome(sourcePath, originalPackageName, originalPackageVersion, elmHomePackagesPath).map(
-          () => ({
-            packageName: originalPackageName,
-            action: "sideloaded" as const,
-            source: sideloadedPackage.path,
-          })
-        )
+        return copyPackageToElmHome(
+          runtime,
+          sourcePath,
+          originalPackageName,
+          originalPackageVersion,
+          elmHomePackagesPath
+        ).map(() => ({
+          packageName: originalPackageName,
+          action: "sideloaded" as const,
+          source: sideloadedPackage.path,
+        }))
 
       default:
         const _: never = sideloadedPackage
-        return err("invalidSideloadConfig")
+        return errAsync("invalidSideloadConfig")
     }
   }
 
@@ -348,22 +350,13 @@ function executeInstall(
     config: SideloadConfig,
     cacheDir: string,
     elmHomePackagesPath: string
-  ): Result<AppliedChange[], CommandError> => {
-    const changes: AppliedChange[] = []
+  ): ResultAsync<AppliedChange[], CommandError> => {
+    const installPromises = config.sideloads.map((sideload) => installSideload(sideload, cacheDir, elmHomePackagesPath))
 
-    for (const sideload of config.sideloads) {
-      const result = installSideload(sideload, cacheDir, elmHomePackagesPath)
-      if (result.isErr()) {
-        return err(result.error)
-      }
-      changes.push(result.value)
-    }
-
-    return ok(changes)
+    return ResultAsync.combine(installPromises)
   }
 
   const createResult = (changes: AppliedChange[]): ExecutionResult => ({
-    success: true,
     message:
       mode === "dry-run"
         ? `Would install ${changes.length} sideloads (dry-run mode)`
@@ -400,56 +393,47 @@ function executeInstall(
 // Unload Command
 // =============================================================================
 
-function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> {
+function executeUnload(runtime: Runtime): ResultAsync<ExecutionResult, CommandError> {
   const removeSideloadedPackage = (
     packageName: string,
     version: string,
     elmHomePackagesPath: string
-  ): Result<AppliedChange, CommandError> => {
-    try {
-      const [author, name] = packageName.split("/")
-      if (!author || !name) {
-        return err("invalidPackageName")
-      }
+  ): ResultAsync<AppliedChange, CommandError> => {
+    const [author, name] = packageName.split("/")
+    if (!author || !name) {
+      return errAsync("invalidPackageName")
+    }
 
-      const packageDir = path.join(elmHomePackagesPath, author, name, version)
+    const packageDir = path.join(elmHomePackagesPath, author, name, version)
 
-      console.log(`Deleting sideloaded package at ${packageDir} to force the compiler to re-download the package...`)
+    console.log(`Deleting sideloaded package at ${packageDir} to force the compiler to re-download the package...`)
 
-      if (fs.existsSync(packageDir)) {
-        fs.rmSync(packageDir, { recursive: true, force: true })
-      }
-
-      return ok({
+    return runtime.fileSystem
+      .exists(packageDir)
+      .andThen((exists) => {
+        if (exists) {
+          return runtime.fileSystem.deleteDir(packageDir)
+        } else {
+          return okAsync(undefined)
+        }
+      })
+      .map(() => ({
         packageName,
         action: "restored" as const,
         source: "official package repository",
-      })
-    } catch (error) {
-      console.error(`Failed to remove package ${packageName}:`, error)
-      return err("packageCopyFailed")
-    }
+      }))
+      .mapErr(() => "packageCopyFailed" as const)
   }
 
   const performUnload = (
     config: SideloadConfig,
     elmHomePackagesPath: string
-  ): Result<AppliedChange[], CommandError> => {
-    const changes: AppliedChange[] = []
+  ): ResultAsync<AppliedChange[], CommandError> => {
+    const unloadPromises = config.sideloads.map((sideload) =>
+      removeSideloadedPackage(sideload.originalPackageName, sideload.originalPackageVersion, elmHomePackagesPath)
+    )
 
-    for (const sideload of config.sideloads) {
-      const result = removeSideloadedPackage(
-        sideload.originalPackageName,
-        sideload.originalPackageVersion,
-        elmHomePackagesPath
-      )
-      if (result.isErr()) {
-        return err(result.error)
-      }
-      changes.push(result.value)
-    }
-
-    return ok(changes)
+    return ResultAsync.combine(unloadPromises)
   }
 
   return loadSideloadConfig(runtime)
@@ -459,7 +443,6 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
       )
     )
     .map((changes) => ({
-      success: true,
       message: `Successfully unloaded ${changes.length} sideloads`,
       changes,
     }))
@@ -469,25 +452,26 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
 // Utility Functions
 // =============================================================================
 
-const bustElmCache = (runtime: Runtime): Result<void, CommandError> => {
+const bustElmCache = (runtime: Runtime): ResultAsync<void, CommandError> => {
   const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", "0.19.1")
 
-  try {
-    if (fs.existsSync(elmStuffPath)) {
-      console.log(`Deleting ${elmStuffPath} to bust compilation cache...`)
-      fs.rmSync(elmStuffPath, { recursive: true, force: true })
-    }
-    return ok(undefined)
-  } catch (error) {
-    console.error(`Failed to delete elm-stuff cache:`, error)
-    return err("writeError")
-  }
+  return runtime.fileSystem
+    .exists(elmStuffPath)
+    .andThen((exists) => {
+      if (exists) {
+        console.log(`Deleting ${elmStuffPath} to bust compilation cache...`)
+        return runtime.fileSystem.deleteDir(elmStuffPath)
+      } else {
+        return okAsync(undefined)
+      }
+    })
+    .mapErr(() => "writeError" as const)
 }
 
-function resolveInputToSource(runtime: Runtime, input: ConfigureInput): Result<ConfigureSource, CommandError> {
+function resolveInputToSource(runtime: Runtime, input: ConfigureInput): ResultAsync<ConfigureSource, CommandError> {
   switch (input.type) {
     case "relative":
-      return ok(input)
+      return okAsync(input)
 
     case "github":
       if ("sha" in input.pinTo) {
@@ -536,69 +520,39 @@ function resolveInputToSource(runtime: Runtime, input: ConfigureInput): Result<C
 }
 
 function copyPackageToElmHome(
+  runtime: Runtime,
   sourcePath: string,
   packageName: string,
   version: string,
   elmHomePackagesPath: string
-): Result<string, CommandError> {
-  try {
-    const [author, name] = packageName.split("/")
-    if (!author || !name) {
-      return err("invalidPackageName")
-    }
-
-    const targetDir = path.join(elmHomePackagesPath, author, name, version)
-
-    // Create target directory
-    fs.mkdirSync(targetDir, { recursive: true })
-
-    // Copy all files from source to target
-    copyDirectoryRecursive(sourcePath, targetDir)
-
-    return ok(targetDir)
-  } catch (error) {
-    console.error(`Failed to copy package ${packageName} to ELM_HOME:`, error)
-    return err("packageCopyFailed")
+): ResultAsync<string, CommandError> {
+  const [author, name] = packageName.split("/")
+  if (!author || !name) {
+    return errAsync("invalidPackageName")
   }
+
+  const targetDir = path.join(elmHomePackagesPath, author, name, version)
+
+  // Create target directory and copy all files from source to target
+  return runtime.fileSystem
+    .mkdir(targetDir)
+    .andThen(() => runtime.fileSystem.copyDirectoryRecursive(sourcePath, targetDir))
+    .map(() => targetDir)
+    .mapErr(() => "packageCopyFailed" as const)
 }
 
-function copyDirectoryRecursive(source: string, target: string): void {
-  if (!fs.existsSync(source)) {
-    throw new Error(`Source directory does not exist: ${source}`)
-  }
-
-  fs.mkdirSync(target, { recursive: true })
-
-  const items = fs.readdirSync(source)
-  for (const item of items) {
-    // Skip .git directory to avoid permission issues
-    if (item === ".git") {
-      continue
-    }
-
-    const sourcePath = path.join(source, item)
-    const targetPath = path.join(target, item)
-
-    if (fs.statSync(sourcePath).isDirectory()) {
-      copyDirectoryRecursive(sourcePath, targetPath)
-    } else {
-      fs.copyFileSync(sourcePath, targetPath)
-    }
-  }
-}
-
-function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Result<string, CommandError> {
+function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
   // Check if requireElmHome is configured
   if (config.requireElmHome) {
     return runtime.environment.elmHome
-      ? ok(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
-      : err("noElmHome")
+      ? okAsync(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
+      : errAsync("noElmHome")
   }
 
   // Default: use `$ELM_HOME` if available, otherwise use default path (defined in the compiler, re-created here)
   const elmHome = runtime.environment.elmHome
   if (elmHome) {
-    return ok(path.join(elmHome, "0.19.1", "packages"))
+    return okAsync(path.join(elmHome, "0.19.1", "packages"))
   }
 
   // Default ELM_HOME location based on OS
@@ -612,19 +566,19 @@ function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Resul
     defaultElmHome = path.join(os.homedir(), ".elm")
   }
 
-  return ok(path.join(defaultElmHome, "0.19.1", "packages"))
+  return okAsync(path.join(defaultElmHome, "0.19.1", "packages"))
 }
 
 // =============================================================================
 // Utility Functions
 // =============================================================================
 
-function loadElmJson(runtime: Runtime): Result<ElmJson, CommandError> {
+function loadElmJson(runtime: Runtime): ResultAsync<ElmJson, CommandError> {
   const elmJsonPath = path.join(runtime.environment.cwd, "elm.json")
 
   const parseElmJson = (content: string): Result<ElmJson, CommandError> => {
     try {
-      return ok(JSON.parse(content) as ElmJson)
+      return ok(JSON.parse(content) satisfies ElmJson)
     } catch (error) {
       return err("couldNotReadElmJson")
     }
@@ -633,7 +587,7 @@ function loadElmJson(runtime: Runtime): Result<ElmJson, CommandError> {
   return runtime.fileSystem.readFile(elmJsonPath).andThen(parseElmJson)
 }
 
-function loadSideloadConfig(runtime: Runtime): Result<SideloadConfig, CommandError> {
+function loadSideloadConfig(runtime: Runtime): ResultAsync<SideloadConfig, CommandError> {
   const configPath = path.join(runtime.environment.cwd, "elm.sideload.json")
 
   const parseConfig = (content: string): Result<SideloadConfig, CommandError> => {
