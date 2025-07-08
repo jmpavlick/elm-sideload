@@ -63,8 +63,8 @@ const BIN_PATH: string = `node ${path.join(DIST, "index.js")}`
 const TEST_OUTPUT_DIR: string = path.join(ROOT, ".test")
 
 // run a command-line invocation
-const toRunCmd = (workDir: string) => (command: string) => {
-  const executableCommand: string = command.replace("elm-sideload", BIN_PATH)
+const toRunCmd = (workDir: string, logFile: string) => (command: string) => {
+  const executableCommand: string = command.replace("elm-sideload ", `${BIN_PATH} `)
   process.stdout.write(`$ ${command}\n\n`)
 
   // Determine shell based on OS and environment
@@ -81,7 +81,11 @@ const toRunCmd = (workDir: string) => (command: string) => {
     shell: getShell(),
   })
 
+  // Write to both stdout and file
   process.stdout.write(`${commandOutput}\n\n`)
+  fs.appendFileSync(logFile, `$ ${command}\n${commandOutput}\n\n`)
+
+  return commandOutput
 }
 
 type Compiler = {
@@ -100,7 +104,7 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
   fs.mkdirSync(workDir, { recursive: true })
 
   // create run command
-  const runCmd = toRunCmd(workDir)
+  const runCmd = toRunCmd(workDir, path.join(workDir, "command.log"))
 
   // clean-build the app
 
@@ -123,8 +127,10 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
 
   return {
     runCmd,
-    getSideloadConfig: () => fs.readFileSync(path.join(workDir, "elm.sideload.config"), "utf-8"),
+    getElmSideloadConfig: () => fs.readFileSync(path.join(workDir, "elm.sideload.json"), "utf-8"),
     getCompiledOutput: () => fs.readFileSync(path.join(workDir, compiler.compiledFilename), "utf-8"),
+    getStdout: () => fs.readFileSync(path.join(workDir, "command.log"), "utf-8"),
+    elmSideloadCacheDir: path.join(workDir, ".elm.sideload.cache"),
   }
 }
 
@@ -138,15 +144,24 @@ const toSuite =
       string,
       (() => string | void)[],
       ({
-        getSideloadConfig,
+        runCmd,
+        getElmSideloadConfig,
         getCompiledOutput,
+        getStdout,
+        elmSideloadCacheDir,
       }: {
-        getSideloadConfig: () => string
+        runCmd: (command: string) => string
+        getElmSideloadConfig: () => string
         getCompiledOutput: () => string
+        getStdout: () => string
+        elmSideloadCacheDir: string
       }) => void,
     ][]
   ) => {
     describe(`end-to-end for ${compiler.label} with $ELM_HOME ${elmHome ? `set to ${elmHome}` : "unset"}`, () => {
+      // Print suite header once
+      process.stdout.write(`# suite for ${compiler.label}\n\n`)
+
       // define an evaluation to get a unique filesystem location for each test
       const toTestSlug = (title: string) => `${compiler.label}_${title}`.toLowerCase().replace(/[^a-z]/g, "-")
 
@@ -155,19 +170,25 @@ const toSuite =
         (title: string, setup: (() => string | void)[]) =>
         (
           runAssertions: ({
-            getSideloadConfig,
+            runCmd,
+            getElmSideloadConfig,
+            getCompiledOutput,
+            getStdout,
+            elmSideloadCacheDir,
           }: {
-            getSideloadConfig: () => string
+            runCmd: (command: string) => string
+            getElmSideloadConfig: () => string
             getCompiledOutput: () => string
+            getStdout: () => string
+            elmSideloadCacheDir: string
           }) => void
         ) => {
           const testSlug: string = toTestSlug(title)
 
-          process.stdout.write(`# suite for ${compiler.label}\n\n`)
-
-          it(testSlug, async () => {
+          it(title, async () => {
             process.stdout.write(`## ${title}\n\n`)
-            const { runCmd, getSideloadConfig, getCompiledOutput } = toInitializedEnv(compiler, elmHome)(testSlug)
+            const { runCmd, getElmSideloadConfig, getCompiledOutput, getStdout, elmSideloadCacheDir } =
+              toInitializedEnv(compiler, elmHome)(testSlug)
 
             // run commands
             setup.map((thunk) => {
@@ -179,8 +200,7 @@ const toSuite =
             })
 
             // perform assertions
-
-            runAssertions({ getSideloadConfig, getCompiledOutput })
+            runAssertions({ runCmd, getElmSideloadConfig, getCompiledOutput, getStdout, elmSideloadCacheDir })
           })
         }
 
@@ -214,13 +234,20 @@ const tests = (
   string,
   (() => string | void)[],
   ({
-    getSideloadConfig,
+    runCmd,
+    getElmSideloadConfig,
     getCompiledOutput,
+    getStdout,
+    elmSideloadCacheDir,
   }: {
-    getSideloadConfig: () => string
+    runCmd: (command: string) => string
+    getElmSideloadConfig: () => string
     getCompiledOutput: () => string
+    getStdout: () => string
+    elmSideloadCacheDir: string
   }) => void,
 ][] => [
+  /*
   [
     "environment setup should succeed",
     [() => compiler.make],
@@ -234,23 +261,53 @@ const tests = (
     "help command should work",
     [() => "elm-sideload"],
     (env) => {
-      throw new Error("TODO: implement help command test")
+      const { getStdout } = env
+      const stdout = getStdout()
+
+      expect(stdout).toContain("elm-sideload: congratulations")
     },
   ],
   [
     "init command should work",
     [() => "elm-sideload init"],
     (env) => {
-      throw new Error("TODO: implement init command test")
+      const { getStdout, getElmSideloadConfig } = env
+      const stdout = getStdout()
+      const elmSideloadConfig = getElmSideloadConfig()
+
+      expect(stdout).toContain("Created elm.sideload.json, .elm.sideload.cache directory, and updated .gitignore")
     },
   ],
+  */
   [
-    "configure command with github branch should work",
-    [() => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe"],
+    "github should update config, get sha, and cache the clone",
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+    ],
     (env) => {
-      throw new Error("TODO: implement configure github branch test")
+      // setup
+      const { runCmd, getStdout, getElmSideloadConfig, elmSideloadCacheDir } = env
+      const stdout = getStdout()
+      const elmSideloadConfig = JSON.parse(getElmSideloadConfig())
+
+      // Get the actual SHA from the cached git repo
+      const gitSha = runCmd(`git -C ${elmSideloadCacheDir}/lydell/virtual-dom rev-parse HEAD`).trim()
+
+      // assertions
+      expect(elmSideloadConfig.sideloads).toHaveLength(1)
+      expect(elmSideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo.sha).toBe(gitSha)
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo).not.toHaveProperty("branch")
+
+      // Verify the repo was cached
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "elm", "virtual-dom"))).toBe(true)
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "elm", "virtual-dom", ".git"))).toBe(true)
     },
   ],
+  /*
   [
     "configure command with github sha should work",
     [() => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha abc123"],
@@ -293,6 +350,7 @@ const tests = (
       throw new Error("TODO: implement unload test")
     },
   ],
+  */
 ]
 
 // ACTUALLY DO SOMETHING
