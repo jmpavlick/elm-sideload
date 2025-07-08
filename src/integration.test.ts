@@ -351,17 +351,28 @@ const tests = (
       expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
-  // CURRENT AREA OF FOCUS
-  /*
   [
-    "configure command with relative path should work",
-    [() => "elm-sideload configure elm/virtual-dom --relative ./local-package"],
+    "relative path should update config",
+    [
+      () => "yes n | elm-sideload init",
+      () => "mkdir local-elm-vdom",
+      () => "cd local-elm-vdom",
+      () => "git clone git@github.com:lydell/virtual-dom",
+      () => "cd ..",
+      () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
+    ],
     (env) => {
-      throw new Error("TODO: implement configure relative test")
+      // setup
+      const { getElmSideloadConfig } = env
+      const elmSideloadConfig = JSON.parse(getElmSideloadConfig())
+
+      // assertions
+      expect(elmSideloadConfig.sideloads).toHaveLength(1)
+      expect(elmSideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.type).toBe("relative")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.path).toBe("./local-elm-vdom/virtual-dom")
     },
   ],
-  */
-  // SUCOF FO AERA TNERRUC
   [
     "install command interactive should work",
     [
@@ -374,10 +385,31 @@ const tests = (
     },
   ],
   [
-    "install --always should install without prompting and update the expected directory",
+    "install --always should install without prompting and update the expected directory for a github remote",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => "elm-sideload install --always",
+      () => compiler.make,
+    ],
+    (env) => {
+      // setup
+      const { getCompiledOutput } = env
+      const compiledOutput = getCompiledOutput()
+
+      // assertions
+      expect(compiledOutput).toContain(SIDELOADS_APPLIED_SIGNAL)
+    },
+  ],
+  [
+    "install --always should install without prompting and update the expected directory for a relative source",
+    [
+      () => "yes n | elm-sideload init",
+      () => "mkdir local-elm-vdom",
+      () => "cd local-elm-vdom",
+      () => "git clone git@github.com:lydell/virtual-dom",
+      () => "cd ..",
+      () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
       () => "elm-sideload install --always",
       () => compiler.make,
     ],
@@ -449,7 +481,7 @@ const tests = (
 // ACTUALLY DO SOMETHING
 compilers.forEach((compiler) => {
   // set `process.env.ELM_HOME` to empty
-  process.env.ELM_HOME = undefined
+  delete process.env.ELM_HOME
   // clear compiler's dir
   const compilerTestOutputDir = path.join(TEST_OUTPUT_DIR, compiler.label)
   if (fs.existsSync(compilerTestOutputDir)) {

@@ -150,10 +150,11 @@ function executeInit(runtime: Runtime): ResultAsync<ExecutionResult, CommandErro
         : okAsync(undefined)
 
   const promptForElmHome = (): ResultAsync<boolean, CommandError> => {
+    const envElmHome = runtime.environment.getEnv("ELM_HOME")
     const { elmHome } = runtime.environment
-    const message = elmHome
-      ? `An ELM_HOME was found at: ${elmHome}\nShould elm-sideload require ELM_HOME to be set? (Y/n) `
-      : `No ELM_HOME was found.\nShould elm-sideload require ELM_HOME to be set? (Y/n) `
+    const message = !!envElmHome
+      ? `An ELM_HOME was found at: ${envElmHome}\nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
+      : `No ELM_HOME was found; defaulting to ${elmHome} in this environment. \nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
 
     return runtime.userIO.prompt(message).map((answer) => {
       return answer.toLowerCase().trim().startsWith("y")
