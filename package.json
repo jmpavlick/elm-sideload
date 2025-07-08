@@ -8,14 +8,12 @@
     "elm-sideload": "dist/index.js"
   },
   "scripts": {
-    "prebuild": "node scripts/generate-help.js",
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
-    "dev": "npm run build && node dist/index.js",
-    "generate-help": "node scripts/generate-help.js"
+    "dev": "npm run build && node dist/index.js"
   },
   "repository": {
     "type": "git",
