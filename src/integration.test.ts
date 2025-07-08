@@ -98,7 +98,8 @@ function setupTestEnvironment(env: TestEnvironment): void {
 // =============================================================================
 
 function runCommand(command: string, env: TestEnvironment): string {
-  console.log(`Running: ${command}`)
+  // Log command execution for debugging
+  process.stdout.write(`$ ${command}\n`)
   try {
     return execSync(command, {
       cwd: env.tempDir,
@@ -137,6 +138,12 @@ function getElmHomePackagePath(env: TestEnvironment, packageName: string, versio
 function getKernelFilePath(env: TestEnvironment, packageName: string, version: string): string {
   return path.join(getElmHomePackagePath(env, packageName, version), "src", "Elm", "Kernel", "VirtualDom.js")
 }
+
+// =============================================================================
+// CLI Execution Helpers
+// =============================================================================
+
+const ELM_SIDELOAD_BIN = (env: TestEnvironment): string => `node ${path.join(env.originalCwd, "dist/index.js")} init`
 
 // =============================================================================
 // Command Blocks
@@ -203,6 +210,10 @@ const unloadSideloads: CommandBlock = {
     runCommand(`node ${path.join(env.originalCwd, "dist/index.js")} unload`, env)
   },
 }
+
+//
+
+//
 
 // =============================================================================
 // Test Suite

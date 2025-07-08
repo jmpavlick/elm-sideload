@@ -63,10 +63,7 @@ export type Environment = {
 
 export type SideloadConfig = {
   elmJsonPath: string
-  elmHomePackagesPath?:
-    | { type: "relative"; path: string }
-    | { type: "absolute"; path: string }
-    | { type: "requireElmHome"; value: true }
+  elmHomePackagesPath?: { type: "relative"; path: string } | { type: "requireElmHome"; value: true }
   sideloads: SideloadRegistration[]
 }
 

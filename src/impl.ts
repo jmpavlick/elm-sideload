@@ -67,7 +67,7 @@ applying your sideload configuration:
           - If you do _not_ have an '$ELM_HOME' set, print the value of the directory that it intends to write to
         - Check for the 'elm.json' in your 'elm.sideload.json'; if it does not exist, it will signal adversity and exit
         - If you have set an 'elmHomePackagesPath' in your 'elm.sideload.json':
-          - For 'relative' or 'absolute', it will ensure that the target directory exists _and_ is writable; if not, it will signal adversity and exit
+          - For 'relative', it will ensure that the target directory exists _and_ is writable; if not, it will signal adversity and exit
           - For 'requireElmHome: true', it will use the default path as constructed from '$ELM_HOME'; if you set 'requireElmHome: true' and
             the program runs in a shell without '$ELM_HOME' set, it will signal adversity and exit.
         - If the program is still running at this point, IT WILL ASK YOU TO CONFIRM! that you DO IN FACT want to overwrite the target packages
@@ -563,8 +563,6 @@ function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Resul
     switch (config.elmHomePackagesPath.type) {
       case "relative":
         return ok(path.resolve(runtime.environment.cwd, config.elmHomePackagesPath.path))
-      case "absolute":
-        return ok(config.elmHomePackagesPath.path)
       case "requireElmHome":
         return runtime.environment.elmHome
           ? ok(path.join(runtime.environment.elmHome, "0.19.1", "packages"))
@@ -575,7 +573,7 @@ function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): Resul
     }
   }
 
-  // Default: use ELM_HOME if available, otherwise use default path
+  // Default: use `$ELM_HOME` if available, otherwise use default path (defined in the compiler, re-created here)
   const elmHome = runtime.environment.elmHome
   if (elmHome) {
     return ok(path.join(elmHome, "0.19.1", "packages"))
