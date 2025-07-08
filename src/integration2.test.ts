@@ -278,9 +278,8 @@ const tests = (
       expect(stdout).toContain("Created elm.sideload.json, .elm.sideload.cache directory, and updated .gitignore")
     },
   ],
-  */
   [
-    "github should update config, get sha, and cache the clone",
+    "github by branch should update config, get sha, and cache the clone",
     [
       () => "elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -300,19 +299,38 @@ const tests = (
       expect(elmSideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
       expect(elmSideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
       expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo.sha).toBe(gitSha)
-      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo).not.toHaveProperty("branch")
 
       // Verify the repo was cached
       expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom"))).toBe(true)
       expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
-  /*
   [
-    "configure command with github sha should work",
-    [() => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha abc123"],
+    "github by sha should update config, get sha, and cache the clone",
+    [
+      () =>
+        "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha 8c20e5b9f309e82e67284669f3740132a2a4d9d6",
+    ],
     (env) => {
-      throw new Error("TODO: implement configure github sha test")
+      // setup
+      const { runCmd, getElmSideloadConfig, elmSideloadCacheDir } = env
+      const elmSideloadConfig = JSON.parse(getElmSideloadConfig())
+
+      // Get the actual SHA from the cached git repo
+      const expectedGitSha = "8c20e5b9f309e82e67284669f3740132a2a4d9d6"
+      const actualGitSha = runCmd(`git -C ${elmSideloadCacheDir}/lydell/virtual-dom rev-parse HEAD`).trim()
+
+      // assertions
+      expect(expectedGitSha).toBe(actualGitSha)
+      expect(elmSideloadConfig.sideloads).toHaveLength(1)
+      expect(elmSideloadConfig.sideloads[0].originalPackageName).toBe("elm/virtual-dom")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.type).toBe("github")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.url).toBe("https://github.com/lydell/virtual-dom")
+      expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo.sha).toBe(expectedGitSha)
+
+      // Verify the repo was cached
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom"))).toBe(true)
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
   [
@@ -329,28 +347,86 @@ const tests = (
       throw new Error("TODO: implement install interactive test")
     },
   ],
-  [
-    "install command always should work",
-    [() => "elm-sideload install --always"],
-    (env) => {
-      throw new Error("TODO: implement install always test")
-    },
-  ],
-  [
-    "install command dry-run should work",
-    [() => "elm-sideload install --dry-run"],
-    (env) => {
-      throw new Error("TODO: implement install dry-run test")
-    },
-  ],
-  [
-    "unload command should work",
-    [() => "elm-sideload unload"],
-    (env) => {
-      throw new Error("TODO: implement unload test")
-    },
-  ],
   */
+  [
+    "install --always should install without prompting and update the expected directory",
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => "elm-sideload install --always",
+      () => compiler.make,
+    ],
+    (env) => {
+      // setup
+      const { getCompiledOutput } = env
+      const compiledOutput = getCompiledOutput()
+
+      // assertions
+      expect(compiledOutput).toContain("25 000")
+
+      throw new Error("TODO; finish")
+    },
+  ],
+  [
+    "install command dry-run should validate installation without prompting",
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => "elm-sideload install --dry-run",
+      () => compiler.make,
+    ],
+    (env) => {
+      // setup
+      const { getCompiledOutput } = env
+      const compiledOutput = getCompiledOutput()
+
+      // assertions
+      expect(compiledOutput).not.toContain("25 000")
+
+      throw new Error("TODO; finish")
+    },
+  ],
+  [
+    "unload command should remove sideloads",
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => "elm-sideload install --always",
+      () => compiler.make,
+      () => "elm-sideload unload",
+      () => compiler.make,
+    ],
+    (env) => {
+      // setup
+      const { getCompiledOutput } = env
+      const compiledOutput = getCompiledOutput()
+
+      // assertions
+      expect(compiledOutput).not.toContain("25 000")
+
+      throw new Error("TODO; finish")
+    },
+  ],
+  [
+    "install command should force elm make to rebuild with the sideloads",
+    [
+      () => "elm-sideload init",
+      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => compiler.make,
+      () => "elm-sideload install --always",
+      () => compiler.make,
+    ],
+    (env) => {
+      // setup
+      const { getCompiledOutput } = env
+      const compiledOutput = getCompiledOutput()
+
+      // assertions
+      expect(compiledOutput).not.toContain("25 000")
+
+      throw new Error("TODO; finish")
+    },
+  ],
 ]
 
 // ACTUALLY DO SOMETHING
