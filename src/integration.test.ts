@@ -256,7 +256,6 @@ const tests = (
     elmSideloadCacheDir: string
   }) => void,
 ][] => [
-  /*
   [
     "environment setup should succeed",
     [() => compiler.make],
@@ -342,7 +341,6 @@ const tests = (
       expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
-  */
   // CURRENT AREA OF FOCUS
   /*
   [
@@ -352,6 +350,8 @@ const tests = (
       throw new Error("TODO: implement configure relative test")
     },
   ],
+  */
+  // SUCOF FO AERA TNERRUC
   [
     "install command interactive should work",
     [
@@ -363,8 +363,6 @@ const tests = (
       throw new Error("TODO: implement install interactive test")
     },
   ],
-  */
-  // SUCOF FO AERA TNERRUC
   [
     "install --always should install without prompting and update the expected directory",
     [
