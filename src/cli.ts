@@ -108,11 +108,16 @@ function createEnvironment(): Environment {
   const elmJsonPath = path.join(cwd, "elm.json")
   const sideloadConfigPath = path.join(cwd, "elm.sideload.json")
 
+  // Local environment variable store
+  const envVars = new Map<string, string | undefined>()
+
   return {
     elmHome: getElmHome(),
     cwd,
     hasElmJson: fs.existsSync(elmJsonPath),
     hasSideloadConfig: fs.existsSync(sideloadConfigPath),
+    getEnv: (key: string) => (envVars.has(key) ? envVars.get(key) : process.env[key]),
+    setEnv: (key: string, value: string | undefined) => envVars.set(key, value),
   }
 }
 
@@ -258,6 +263,14 @@ export function createTestRuntime(
     cwd: "/test/project",
     hasElmJson: true,
     hasSideloadConfig: false,
+    getEnv: (key: string) => process.env[key],
+    setEnv: (key: string, value: string | undefined) => {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    },
     ...environment,
   }
 

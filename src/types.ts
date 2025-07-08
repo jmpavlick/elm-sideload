@@ -45,18 +45,20 @@ export type UnloadCommand = {
 // Runtime Environment
 // =============================================================================
 
-export type Runtime = {
+export interface Runtime {
   command: Command
   environment: Environment
   fileSystem: FileSystemAdapter
   gitIO: GitIO
 }
 
-export type Environment = {
-  elmHome: string
+export interface Environment {
+  elmHome: string | undefined
   cwd: string
   hasElmJson: boolean
   hasSideloadConfig: boolean
+  getEnv: (key: string) => string | undefined
+  setEnv: (key: string, value: string | undefined) => void
 }
 
 // =============================================================================

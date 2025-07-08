@@ -120,8 +120,7 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
       // if the directory doesn't exist, create it
       fs.mkdirSync(elmHome)
     }
-
-    process.env.ELM_HOME = elmHome
+    // Note: ELM_HOME will be passed via execSync env option, not global process.env
   }
 
   // create a new elm app
