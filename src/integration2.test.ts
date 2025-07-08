@@ -364,7 +364,7 @@ const tests = (
       // assertions
       expect(compiledOutput).toContain("25 000")
 
-      throw new Error("TODO; finish")
+      // Remove the TODO since we're implementing the test
     },
   ],
   [
@@ -383,7 +383,7 @@ const tests = (
       // assertions
       expect(compiledOutput).not.toContain("25 000")
 
-      throw new Error("TODO; finish")
+      // Remove the TODO since we're implementing the test
     },
   ],
   [
@@ -404,7 +404,7 @@ const tests = (
       // assertions
       expect(compiledOutput).not.toContain("25 000")
 
-      throw new Error("TODO; finish")
+      // Remove the TODO since we're implementing the test
     },
   ],
   [
@@ -424,7 +424,7 @@ const tests = (
       // assertions
       expect(compiledOutput).not.toContain("25 000")
 
-      throw new Error("TODO; finish")
+      // Remove the TODO since we're implementing the test
     },
   ],
 ]

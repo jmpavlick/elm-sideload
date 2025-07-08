@@ -116,8 +116,16 @@ export const createGitIO = (): Result<GitIO, string> => {
         },
 
         pull: (repoDir: string): Result<void, Error> => {
-          return runGitCommand("git pull", repoDir)
-            .map(() => void 0)
+          // Check if we're in detached HEAD state
+          return runGitCommand("git symbolic-ref -q HEAD", repoDir)
+            .andThen(() => {
+              // We're on a branch, safe to pull
+              return runGitCommand("git pull", repoDir).map(() => void 0)
+            })
+            .orElse(() => {
+              // We're in detached HEAD (common after checking out a SHA), just fetch
+              return runGitCommand("git fetch", repoDir).map(() => void 0)
+            })
             .mapErr((error) => {
               if (error.type === "commandError") {
                 return { type: "pullError", message: error.message }
