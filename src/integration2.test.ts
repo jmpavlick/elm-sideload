@@ -63,15 +63,25 @@ const BIN_PATH: string = `node ${path.join(DIST, "index.js")}`
 const TEST_OUTPUT_DIR: string = path.join(ROOT, ".test")
 
 // run a command-line invocation
-const toRunCmd = (testSlug: string) => (command: string) => {
-  const porcelain: string = command.replace(BIN_PATH, "elm-sideload")
-  process.stdout.write(`$ ${porcelain}`)
+const toRunCmd = (workDir: string) => (command: string) => {
+  const executableCommand: string = command.replace("elm-sideload", BIN_PATH)
+  process.stdout.write(`$ ${command}\n\n`)
 
-  execSync(command, {
-    cwd: path.join(TEST_OUTPUT_DIR, testSlug),
+  // Determine shell based on OS and environment
+  const getShell = () => {
+    if (process.env.SHELL) return process.env.SHELL
+    if (process.platform === "win32") return "cmd"
+    return "/bin/bash" // Default for Unix-like systems (Linux, macOS)
+  }
+
+  const commandOutput = execSync(executableCommand, {
+    cwd: workDir,
     encoding: "utf-8",
     env: { ...process.env, PATH: `${DIST}:${process.env.PATH}` },
+    shell: getShell(),
   })
+
+  process.stdout.write(`${commandOutput}\n\n`)
 }
 
 type Compiler = {
@@ -80,12 +90,14 @@ type Compiler = {
   install: (packageName: string) => string
   srcDirName: string
   make: string
+  compiledFilename: string
 }
 
 const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDir: string) => {
   // define and clear working directory for test output
   const workDir = path.join(TEST_OUTPUT_DIR, compiler.label, testOutputDir)
   fs.rmSync(workDir, { recursive: true, force: true })
+  fs.mkdirSync(workDir, { recursive: true })
 
   // create run command
   const runCmd = toRunCmd(workDir)
@@ -109,7 +121,11 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
   // write the test `Main.elm` to the new `src` directory
   fs.writeFileSync(path.join(workDir, compiler.srcDirName, "Main.elm"), ellie, "utf-8")
 
-  return { runCmd, getSideloadConfig: () => fs.readFileSync(path.join(workDir, "elm.sideload.config"), "utf-8") }
+  return {
+    runCmd,
+    getSideloadConfig: () => fs.readFileSync(path.join(workDir, "elm.sideload.config"), "utf-8"),
+    getCompiledOutput: () => fs.readFileSync(path.join(workDir, compiler.compiledFilename), "utf-8"),
+  }
 }
 
 // define an evaluation to get an environment and all tests for a given compiler
@@ -121,11 +137,21 @@ const toSuite = (compiler: Compiler, elmHome?: string) => {
     // define an evaluation to wrap the test setup, execution, and assertions for each test
     const toTest =
       (title: string, setup: (() => string | void)[]) =>
-      (runAssertions: ({ getSideloadConfig }: { getSideloadConfig: () => string }) => void) => {
+      (
+        runAssertions: ({
+          getSideloadConfig,
+        }: {
+          getSideloadConfig: () => string
+          getCompiledOutput: () => string
+        }) => void
+      ) => {
         const testSlug: string = toTestSlug(title)
 
+        process.stdout.write(`# suite for ${compiler.label}\n\n`)
+
         it(testSlug, async () => {
-          const { runCmd, getSideloadConfig } = toInitializedEnv(compiler, elmHome)(testSlug)
+          process.stdout.write(`## ${title}\n\n`)
+          const { runCmd, getSideloadConfig, getCompiledOutput } = toInitializedEnv(compiler, elmHome)(testSlug)
 
           // run commands
           setup.map((thunk) => {
@@ -138,15 +164,20 @@ const toSuite = (compiler: Compiler, elmHome?: string) => {
 
           // perform assertions
 
-          runAssertions({ getSideloadConfig })
+          runAssertions({ getSideloadConfig, getCompiledOutput })
         })
       }
 
     // THE ACTUAL TESTS
-    toTest(
-      "environment setup should succeed",
-      []
-    )((env) => {
+
+    toTest("environment setup should succeed", [() => compiler.make])((env) => {
+      const { getCompiledOutput } = env
+
+      // if this call succeeds, we were able to run the compiler and read the compiled output back in
+      const _ = getCompiledOutput()
+    })
+
+    toTest("init should succeed", [() => "elm-sideload"])((env) => {
       const { getSideloadConfig } = env
     })
   })
@@ -159,8 +190,14 @@ const compilers: Compiler[] = [
     install: (packageName) => `yes | elm install ${packageName}`,
     srcDirName: "src",
     make: "elm make src/Main.elm",
+    compiledFilename: "index.html",
   },
 ]
+
+// global setup
+process.stdout.write(`global setup: deleting and re-creating test output directory: ${TEST_OUTPUT_DIR}\n`)
+fs.rmSync(TEST_OUTPUT_DIR, { recursive: true, force: true })
+fs.mkdirSync(TEST_OUTPUT_DIR, { recursive: true })
 
 // ACTUALLY DO SOMETHING
 compilers.map((compiler) => toSuite(compiler))
