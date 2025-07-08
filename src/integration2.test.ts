@@ -53,6 +53,10 @@ main =
         }
 `
 
+// signal that the sideloads have been applied - a comment present in Simon's version of `elm/virtual-dom`
+// contains this string
+const SIDELOADS_APPLIED_SIGNAL: string = "25 000"
+
 // project root
 const ROOT: string = process.cwd()
 // build output folder
@@ -362,7 +366,7 @@ const tests = (
       const compiledOutput = getCompiledOutput()
 
       // assertions
-      expect(compiledOutput).toContain("25 000")
+      expect(compiledOutput).toContain(SIDELOADS_APPLIED_SIGNAL)
 
       // Remove the TODO since we're implementing the test
     },
@@ -381,9 +385,7 @@ const tests = (
       const compiledOutput = getCompiledOutput()
 
       // assertions
-      expect(compiledOutput).not.toContain("25 000")
-
-      // Remove the TODO since we're implementing the test
+      expect(compiledOutput).not.toContain(SIDELOADS_APPLIED_SIGNAL)
     },
   ],
   [
@@ -402,9 +404,7 @@ const tests = (
       const compiledOutput = getCompiledOutput()
 
       // assertions
-      expect(compiledOutput).not.toContain("25 000")
-
-      // Remove the TODO since we're implementing the test
+      expect(compiledOutput).not.toContain(SIDELOADS_APPLIED_SIGNAL)
     },
   ],
   [
@@ -422,9 +422,7 @@ const tests = (
       const compiledOutput = getCompiledOutput()
 
       // assertions
-      expect(compiledOutput).not.toContain("25 000")
-
-      // Remove the TODO since we're implementing the test
+      expect(compiledOutput).not.toContain(SIDELOADS_APPLIED_SIGNAL)
     },
   ],
 ]
