@@ -129,59 +129,67 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
 }
 
 // define an evaluation to get an environment and all tests for a given compiler
-const toSuite = (compiler: Compiler, elmHome?: string) => {
-  describe(`end-to-end for ${compiler.label} with $ELM_HOME ${elmHome ? `set to ${elmHome}` : "unset"}`, () => {
-    // define an evaluation to get a unique filesystem location for each test
-    const toTestSlug = (title: string) => `${compiler.label}_${title}`.toLowerCase().replace(/[^a-z]/g, "-")
+const toSuite =
+  (compiler: Compiler, elmHome?: string) =>
+  (
+    tests: (
+      compiler: Compiler
+    ) => [
+      string,
+      (() => string | void)[],
+      ({
+        getSideloadConfig,
+        getCompiledOutput,
+      }: {
+        getSideloadConfig: () => string
+        getCompiledOutput: () => string
+      }) => void,
+    ][]
+  ) => {
+    describe(`end-to-end for ${compiler.label} with $ELM_HOME ${elmHome ? `set to ${elmHome}` : "unset"}`, () => {
+      // define an evaluation to get a unique filesystem location for each test
+      const toTestSlug = (title: string) => `${compiler.label}_${title}`.toLowerCase().replace(/[^a-z]/g, "-")
 
-    // define an evaluation to wrap the test setup, execution, and assertions for each test
-    const toTest =
-      (title: string, setup: (() => string | void)[]) =>
-      (
-        runAssertions: ({
-          getSideloadConfig,
-        }: {
-          getSideloadConfig: () => string
-          getCompiledOutput: () => string
-        }) => void
-      ) => {
-        const testSlug: string = toTestSlug(title)
+      // define an evaluation to wrap the test setup, execution, and assertions for each test
+      const toTest =
+        (title: string, setup: (() => string | void)[]) =>
+        (
+          runAssertions: ({
+            getSideloadConfig,
+          }: {
+            getSideloadConfig: () => string
+            getCompiledOutput: () => string
+          }) => void
+        ) => {
+          const testSlug: string = toTestSlug(title)
 
-        process.stdout.write(`# suite for ${compiler.label}\n\n`)
+          process.stdout.write(`# suite for ${compiler.label}\n\n`)
 
-        it(testSlug, async () => {
-          process.stdout.write(`## ${title}\n\n`)
-          const { runCmd, getSideloadConfig, getCompiledOutput } = toInitializedEnv(compiler, elmHome)(testSlug)
+          it(testSlug, async () => {
+            process.stdout.write(`## ${title}\n\n`)
+            const { runCmd, getSideloadConfig, getCompiledOutput } = toInitializedEnv(compiler, elmHome)(testSlug)
 
-          // run commands
-          setup.map((thunk) => {
-            const evaluated = thunk()
+            // run commands
+            setup.map((thunk) => {
+              const evaluated = thunk()
 
-            if (typeof evaluated === "string") {
-              runCmd(evaluated)
-            }
+              if (typeof evaluated === "string") {
+                runCmd(evaluated)
+              }
+            })
+
+            // perform assertions
+
+            runAssertions({ getSideloadConfig, getCompiledOutput })
           })
+        }
 
-          // perform assertions
-
-          runAssertions({ getSideloadConfig, getCompiledOutput })
-        })
-      }
-
-    // THE ACTUAL TESTS
-
-    toTest("environment setup should succeed", [() => compiler.make])((env) => {
-      const { getCompiledOutput } = env
-
-      // if this call succeeds, we were able to run the compiler and read the compiled output back in
-      const _ = getCompiledOutput()
+      // Run all the provided tests
+      tests(compiler).forEach(([title, setup, runAssertions]) => {
+        toTest(title, setup)(runAssertions)
+      })
     })
-
-    toTest("init should succeed", [() => "elm-sideload"])((env) => {
-      const { getSideloadConfig } = env
-    })
-  })
-}
+  }
 
 const compilers: Compiler[] = [
   {
@@ -199,5 +207,38 @@ process.stdout.write(`global setup: deleting and re-creating test output directo
 fs.rmSync(TEST_OUTPUT_DIR, { recursive: true, force: true })
 fs.mkdirSync(TEST_OUTPUT_DIR, { recursive: true })
 
+// Test definitions
+const tests = (
+  compiler: Compiler
+): [
+  string,
+  (() => string | void)[],
+  ({
+    getSideloadConfig,
+    getCompiledOutput,
+  }: {
+    getSideloadConfig: () => string
+    getCompiledOutput: () => string
+  }) => void,
+][] => [
+  [
+    "environment setup should succeed",
+    [() => compiler.make],
+    (env) => {
+      const { getCompiledOutput } = env
+
+      // if this call succeeds, we were able to run the compiler and read the compiled output back in
+      const _ = getCompiledOutput()
+    },
+  ],
+  [
+    "init should succeed",
+    [() => "elm-sideload"],
+    (env) => {
+      const { getSideloadConfig } = env
+    },
+  ],
+]
+
 // ACTUALLY DO SOMETHING
-compilers.map((compiler) => toSuite(compiler))
+compilers.map((compiler) => toSuite(compiler)(tests))
