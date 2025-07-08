@@ -1,70 +1,74 @@
 import { describe, it, expect } from "vitest"
-import { ok, err } from "neverthrow"
+import { okAsync, errAsync } from "neverthrow"
+import path from "path"
 import { executeCommand } from "./impl"
 import { createTestRuntime } from "./cli"
 import { Command, SideloadConfig } from "./types"
 
 describe("executeCommand", () => {
-  it("should execute help command", () => {
+  it("should execute help command", async () => {
     const command: Command = { type: "help" }
     const runtime = createTestRuntime(command)
 
-    const result = executeCommand(runtime)
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
 
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("elm-sideload: congratulations")
-    }
+    expect(result.message).toContain("elm-sideload: congratulations")
   })
 
-  it("should execute init command successfully", () => {
+  it("should execute init command successfully", async () => {
     const command: Command = { type: "init" }
-    const runtime = createTestRuntime(command, {
-      hasElmJson: true,
-      hasSideloadConfig: false,
-    })
+    const fileSystemWrites: Record<string, string> = {}
+    const cwd = "/test/project"
 
-    const result = executeCommand(runtime)
+    const runtime = createTestRuntime(
+      command,
+      {
+        hasElmJson: true,
+        hasSideloadConfig: false,
+        cwd,
+      },
+      {
+        readFile: () => okAsync(""), // Mock reading .gitignore
+        writeFile: (filePath: string, content: string) => {
+          fileSystemWrites[filePath] = content
+          return okAsync(undefined)
+        },
+      }
+    )
 
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Created elm.sideload.json")
-    }
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
+
+    const expectedSideloadPath = path.join(cwd, "elm.sideload.json")
+    const expectedGitignorePath = path.join(cwd, ".gitignore")
+
+    expect(result.message).toContain("Created elm.sideload.json")
+    expect(fileSystemWrites[expectedSideloadPath]).toBeDefined()
+    expect(fileSystemWrites[expectedGitignorePath]).toContain(".elm.sideload.cache")
   })
 
-  it("should fail init command when elm.json is missing", () => {
+  it("should fail init command when elm.json is missing", async () => {
     const command: Command = { type: "init" }
     const runtime = createTestRuntime(command, {
       hasElmJson: false,
       hasSideloadConfig: false,
     })
 
-    const result = executeCommand(runtime)
-
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) {
-      expect(result.error).toBe("noElmJsonFound")
-    }
+    const error = (await executeCommand(runtime))._unsafeUnwrapErr()
+    expect(error).toBe("noElmJsonFound")
   })
 
-  it("should fail init command when sideload config already exists", () => {
+  it("should fail init command when sideload config already exists", async () => {
     const command: Command = { type: "init" }
     const runtime = createTestRuntime(command, {
       hasElmJson: true,
       hasSideloadConfig: true,
     })
 
-    const result = executeCommand(runtime)
-
-    expect(result.isErr()).toBe(true)
-    if (result.isErr()) {
-      expect(result.error).toBe("invalidSideloadConfig")
-    }
+    const error = (await executeCommand(runtime))._unsafeUnwrapErr()
+    expect(error).toBe("invalidSideloadConfig")
   })
 
-  it("should execute configure command successfully", () => {
+  it("should execute configure command successfully", async () => {
     const command: Command = {
       type: "configure",
       packageName: "elm/html",
@@ -90,18 +94,18 @@ describe("executeCommand", () => {
     const mockGitIO = {
       clone: (url: string, targetDir: string) => {
         gitIOCalls.push(`clone:${url}:${targetDir}`)
-        return ok(undefined)
+        return okAsync(undefined)
       },
       checkout: (repoDir: string, sha: string) => {
         gitIOCalls.push(`checkout:${repoDir}:${sha}`)
-        return ok(undefined)
+        return okAsync(undefined)
       },
-      getCurrentSha: () => ok("abc123def456"),
-      getRecentCommits: () => ok([]),
-      isClean: () => ok(true),
-      pull: () => ok(undefined),
-      resolveBranchToSha: () => ok("abc123def456"),
-      shaExists: () => ok(true),
+      getCurrentSha: () => okAsync("abc123def456"),
+      getRecentCommits: () => okAsync([]),
+      isClean: () => okAsync(true),
+      pull: () => okAsync(undefined),
+      resolveBranchToSha: () => okAsync("abc123def456"),
+      shaExists: () => okAsync(true),
     }
 
     const runtime = createTestRuntime(
@@ -112,32 +116,28 @@ describe("executeCommand", () => {
         cwd: "/test/project",
       },
       {
-        readFile: (path) => {
+        readFile: (path: string) => {
           if (path.endsWith("elm.json")) {
-            return ok(JSON.stringify(mockElmJson))
+            return okAsync(JSON.stringify(mockElmJson))
           }
-          return err("fileNotFound")
+          return errAsync("fileNotFound" as const)
         },
       }
     )
 
     // Override the mock GitIO
-    runtime.gitIO = mockGitIO
+    runtime.gitIO = mockGitIO as any // cast because the mock is not complete
 
-    const result = executeCommand(runtime)
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
 
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Configured sideload for elm/html")
-    }
+    expect(result.message).toContain("Configured sideload for elm/html")
 
     // Verify GitIO operations were called for caching
     expect(gitIOCalls).toContain("clone:https://github.com/lydell/html:/test/project/.elm.sideload.cache/lydell/html")
     expect(gitIOCalls).toContain("checkout:/test/project/.elm.sideload.cache/lydell/html:abc123def456")
   })
 
-  it("should execute configure command with branch resolution", () => {
+  it("should execute configure command with branch resolution", async () => {
     const command: Command = {
       type: "configure",
       packageName: "elm/virtual-dom",
@@ -163,21 +163,21 @@ describe("executeCommand", () => {
     const mockGitIO = {
       clone: (url: string, targetDir: string) => {
         gitIOCalls.push(`clone:${url}:${targetDir}`)
-        return ok(undefined)
+        return okAsync(undefined)
       },
       checkout: (repoDir: string, sha: string) => {
         gitIOCalls.push(`checkout:${repoDir}:${sha}`)
-        return ok(undefined)
+        return okAsync(undefined)
       },
-      getCurrentSha: () => ok("resolved123sha"),
-      getRecentCommits: () => ok([]),
-      isClean: () => ok(true),
-      pull: () => ok(undefined),
+      getCurrentSha: () => okAsync("resolved123sha"),
+      getRecentCommits: () => okAsync([]),
+      isClean: () => okAsync(true),
+      pull: () => okAsync(undefined),
       resolveBranchToSha: (repoDir: string, branch: string) => {
         gitIOCalls.push(`resolveBranchToSha:${repoDir}:${branch}`)
-        return ok("resolved123sha")
+        return okAsync("resolved123sha")
       },
-      shaExists: () => ok(true),
+      shaExists: () => okAsync(true),
     }
 
     const runtime = createTestRuntime(
@@ -188,25 +188,21 @@ describe("executeCommand", () => {
         cwd: "/test/project",
       },
       {
-        readFile: (path) => {
+        readFile: (path: string) => {
           if (path.endsWith("elm.json")) {
-            return ok(JSON.stringify(mockElmJson))
+            return okAsync(JSON.stringify(mockElmJson))
           }
-          return err("fileNotFound")
+          return errAsync("fileNotFound" as const)
         },
       }
     )
 
     // Override the mock GitIO
-    runtime.gitIO = mockGitIO
+    runtime.gitIO = mockGitIO as any
 
-    const result = executeCommand(runtime)
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
 
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Configured sideload for elm/virtual-dom")
-    }
+    expect(result.message).toContain("Configured sideload for elm/virtual-dom")
 
     // Verify GitIO operations were called for caching with branch resolution
     expect(gitIOCalls).toContain(
@@ -216,7 +212,7 @@ describe("executeCommand", () => {
     expect(gitIOCalls).toContain("checkout:/test/project/.elm.sideload.cache/lydell/virtual-dom:resolved123sha")
   })
 
-  it("should execute install command in dry-run mode", () => {
+  it("should execute install command in dry-run mode", async () => {
     const command: Command = {
       type: "install",
       mode: "dry-run",
@@ -241,30 +237,22 @@ describe("executeCommand", () => {
         hasSideloadConfig: true,
       },
       {
-        readFile: (path) => {
+        readFile: (path: string) => {
           if (path.endsWith("elm.sideload.json")) {
-            return ok(JSON.stringify(mockConfig))
+            return okAsync(JSON.stringify(mockConfig))
           }
-          return err("fileNotFound")
+          return errAsync("fileNotFound" as const)
         },
       }
     )
 
-    const result = executeCommand(runtime)
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
 
-    if (result.isErr()) {
-      console.error("Install command failed:", result.error)
-    }
-
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Would install 1 sideloads (dry-run mode)")
-      expect(result.value.changes).toHaveLength(1)
-    }
+    expect(result.message).toContain("Would install 1 sideloads (dry-run mode)")
+    expect(result.changes).toHaveLength(1)
   })
 
-  it("should execute unload command", () => {
+  it("should execute unload command", async () => {
     const command: Command = { type: "unload" }
 
     const mockConfig: SideloadConfig = {
@@ -283,22 +271,18 @@ describe("executeCommand", () => {
       command,
       {},
       {
-        readFile: (path) => {
+        readFile: (path: string) => {
           if (path.endsWith("elm.sideload.json")) {
-            return ok(JSON.stringify(mockConfig))
+            return okAsync(JSON.stringify(mockConfig))
           }
-          return err("fileNotFound")
+          return errAsync("fileNotFound" as const)
         },
       }
     )
 
-    const result = executeCommand(runtime)
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
 
-    expect(result.isOk()).toBe(true)
-    if (result.isOk()) {
-      expect(result.value.success).toBe(true)
-      expect(result.value.message).toContain("Successfully unloaded 1 sideloads")
-      expect(result.value.changes).toHaveLength(1)
-    }
+    expect(result.message).toContain("Successfully unloaded 1 sideloads")
+    expect(result.changes).toHaveLength(1)
   })
 })
