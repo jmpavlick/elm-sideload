@@ -303,8 +303,8 @@ const tests = (
       expect(elmSideloadConfig.sideloads[0].sideloadedPackage.pinTo).not.toHaveProperty("branch")
 
       // Verify the repo was cached
-      expect(fs.existsSync(path.join(elmSideloadCacheDir, "elm", "virtual-dom"))).toBe(true)
-      expect(fs.existsSync(path.join(elmSideloadCacheDir, "elm", "virtual-dom", ".git"))).toBe(true)
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom"))).toBe(true)
+      expect(fs.existsSync(path.join(elmSideloadCacheDir, "lydell", "virtual-dom", ".git"))).toBe(true)
     },
   ],
   /*

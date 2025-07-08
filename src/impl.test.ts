@@ -85,11 +85,31 @@ describe("executeCommand", () => {
       },
     }
 
+    // Track GitIO calls
+    const gitIOCalls: string[] = []
+    const mockGitIO = {
+      clone: (url: string, targetDir: string) => {
+        gitIOCalls.push(`clone:${url}:${targetDir}`)
+        return ok(undefined)
+      },
+      checkout: (repoDir: string, sha: string) => {
+        gitIOCalls.push(`checkout:${repoDir}:${sha}`)
+        return ok(undefined)
+      },
+      getCurrentSha: () => ok("abc123def456"),
+      getRecentCommits: () => ok([]),
+      isClean: () => ok(true),
+      pull: () => ok(undefined),
+      resolveBranchToSha: () => ok("abc123def456"),
+      shaExists: () => ok(true),
+    }
+
     const runtime = createTestRuntime(
       command,
       {
         hasElmJson: true,
         hasSideloadConfig: false,
+        cwd: "/test/project",
       },
       {
         readFile: (path) => {
@@ -101,6 +121,9 @@ describe("executeCommand", () => {
       }
     )
 
+    // Override the mock GitIO
+    runtime.gitIO = mockGitIO
+
     const result = executeCommand(runtime)
 
     expect(result.isOk()).toBe(true)
@@ -108,6 +131,89 @@ describe("executeCommand", () => {
       expect(result.value.success).toBe(true)
       expect(result.value.message).toContain("Configured sideload for elm/html")
     }
+
+    // Verify GitIO operations were called for caching
+    expect(gitIOCalls).toContain("clone:https://github.com/lydell/html:/test/project/.elm.sideload.cache/lydell/html")
+    expect(gitIOCalls).toContain("checkout:/test/project/.elm.sideload.cache/lydell/html:abc123def456")
+  })
+
+  it("should execute configure command with branch resolution", () => {
+    const command: Command = {
+      type: "configure",
+      packageName: "elm/virtual-dom",
+      source: { type: "github", url: "https://github.com/lydell/virtual-dom", pinTo: { branch: "safe" } },
+    }
+
+    const mockElmJson = {
+      type: "application",
+      "source-directories": ["src"],
+      "elm-version": "0.19.1",
+      dependencies: {
+        direct: { "elm/virtual-dom": "1.0.4" },
+        indirect: {},
+        "test-dependencies": {
+          direct: {},
+          indirect: {},
+        },
+      },
+    }
+
+    // Track GitIO calls
+    const gitIOCalls: string[] = []
+    const mockGitIO = {
+      clone: (url: string, targetDir: string) => {
+        gitIOCalls.push(`clone:${url}:${targetDir}`)
+        return ok(undefined)
+      },
+      checkout: (repoDir: string, sha: string) => {
+        gitIOCalls.push(`checkout:${repoDir}:${sha}`)
+        return ok(undefined)
+      },
+      getCurrentSha: () => ok("resolved123sha"),
+      getRecentCommits: () => ok([]),
+      isClean: () => ok(true),
+      pull: () => ok(undefined),
+      resolveBranchToSha: (repoDir: string, branch: string) => {
+        gitIOCalls.push(`resolveBranchToSha:${repoDir}:${branch}`)
+        return ok("resolved123sha")
+      },
+      shaExists: () => ok(true),
+    }
+
+    const runtime = createTestRuntime(
+      command,
+      {
+        hasElmJson: true,
+        hasSideloadConfig: false,
+        cwd: "/test/project",
+      },
+      {
+        readFile: (path) => {
+          if (path.endsWith("elm.json")) {
+            return ok(JSON.stringify(mockElmJson))
+          }
+          return err("fileNotFound")
+        },
+      }
+    )
+
+    // Override the mock GitIO
+    runtime.gitIO = mockGitIO
+
+    const result = executeCommand(runtime)
+
+    expect(result.isOk()).toBe(true)
+    if (result.isOk()) {
+      expect(result.value.success).toBe(true)
+      expect(result.value.message).toContain("Configured sideload for elm/virtual-dom")
+    }
+
+    // Verify GitIO operations were called for caching with branch resolution
+    expect(gitIOCalls).toContain(
+      "clone:https://github.com/lydell/virtual-dom:/test/project/.elm.sideload.cache/lydell/virtual-dom"
+    )
+    expect(gitIOCalls).toContain("resolveBranchToSha:/test/project/.elm.sideload.cache/lydell/virtual-dom:safe")
+    expect(gitIOCalls).toContain("checkout:/test/project/.elm.sideload.cache/lydell/virtual-dom:resolved123sha")
   })
 
   it("should execute install command in dry-run mode", () => {
