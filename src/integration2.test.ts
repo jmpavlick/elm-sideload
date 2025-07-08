@@ -67,7 +67,7 @@ const BIN_PATH: string = `node ${path.join(DIST, "index.js")}`
 const TEST_OUTPUT_DIR: string = path.join(ROOT, ".test")
 
 // run a command-line invocation
-const toRunCmd = (workDir: string, logFile: string) => (command: string) => {
+const toRunCmd = (workDir: string, logFile: string, elmHome?: string) => (command: string) => {
   const executableCommand: string = command.replace("elm-sideload ", `${BIN_PATH} `)
   process.stdout.write(`$ ${command}\n\n`)
 
@@ -78,10 +78,16 @@ const toRunCmd = (workDir: string, logFile: string) => (command: string) => {
     return "/bin/bash" // Default for Unix-like systems (Linux, macOS)
   }
 
+  // Build environment for subprocess
+  const subprocessEnv: NodeJS.ProcessEnv = { ...process.env, PATH: `${DIST}:${process.env.PATH}` }
+  if (elmHome) {
+    subprocessEnv.ELM_HOME = elmHome
+  }
+
   const commandOutput = execSync(executableCommand, {
     cwd: workDir,
     encoding: "utf-8",
-    env: { ...process.env, PATH: `${DIST}:${process.env.PATH}` },
+    env: subprocessEnv,
     shell: getShell(),
   })
 
@@ -108,7 +114,7 @@ const toInitializedEnv = (compiler: Compiler, elmHome?: string) => (testOutputDi
   fs.mkdirSync(workDir, { recursive: true })
 
   // create run command
-  const runCmd = toRunCmd(workDir, path.join(workDir, "command.log"))
+  const runCmd = toRunCmd(workDir, path.join(workDir, "command.log"), elmHome)
 
   // clean-build the app
 
@@ -250,7 +256,6 @@ const tests = (
     elmSideloadCacheDir: string
   }) => void,
 ][] => [
-  /*
   [
     "environment setup should succeed",
     [() => compiler.make],
@@ -350,7 +355,6 @@ const tests = (
       throw new Error("TODO: implement install interactive test")
     },
   ],
-  */
   [
     "install --always should install without prompting and update the expected directory",
     [
@@ -366,8 +370,6 @@ const tests = (
 
       // assertions
       expect(compiledOutput).toContain(SIDELOADS_APPLIED_SIGNAL)
-
-      // Remove the TODO since we're implementing the test
     },
   ],
   [
