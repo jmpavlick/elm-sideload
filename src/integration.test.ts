@@ -410,6 +410,9 @@ const tests = (
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      // note: since we are sometimes using a global ELM_HOME, we have to unload
+      // in our setup, in case the last test installed
+      () => "elm-sideload unload",
       () => "elm-sideload install --dry-run",
       () => compiler.make,
     ],
@@ -456,7 +459,7 @@ const tests = (
       const compiledOutput = getCompiledOutput()
 
       // assertions
-      expect(compiledOutput).not.toContain(SIDELOADS_APPLIED_SIGNAL)
+      expect(compiledOutput).toContain(SIDELOADS_APPLIED_SIGNAL)
     },
   ],
 ]
