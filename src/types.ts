@@ -1,4 +1,5 @@
 import { Result } from "neverthrow"
+import { type GitIO, type Error as GitIOError } from "./gitIO"
 
 // =============================================================================
 // CLI Command Types
@@ -48,6 +49,7 @@ export type Runtime = {
   command: Command
   environment: Environment
   fileSystem: FileSystemAdapter
+  gitIO: GitIO
 }
 
 export type Environment = {
@@ -122,9 +124,9 @@ export type ValidationError =
   | "invalidPackageName"
   | "packageCopyFailed"
 
-export type RuntimeError = "noElmHome" | "couldNotCreateRuntime" | "invalidArguments"
+export type RuntimeError = "noElmHome" | "couldNotCreateRuntime" | "invalidArguments" | "gitNotAvailable"
 
-export type CommandError = FileError | ValidationError | RuntimeError
+export type CommandError = FileError | ValidationError | RuntimeError | GitIOError
 
 // =============================================================================
 // Execution Results

@@ -3,6 +3,7 @@ import { Result, ok, err } from "neverthrow"
 import * as os from "os"
 import * as path from "path"
 import * as fs from "fs"
+import { createGitIO } from "./gitIO"
 import {
   Command,
   Runtime,
@@ -229,18 +230,17 @@ function parseConfigureCommand(packageName: string, options: any): Result<Config
 // =============================================================================
 
 export function createRuntime(argv: string[]): Result<Runtime, RuntimeError> {
-  const commandResult = parseArgs(argv)
+  return parseArgs(argv).andThen((command) => {
+    const environment = createEnvironment()
 
-  if (commandResult.isErr()) {
-    return err(commandResult.error)
-  }
-
-  const environment = createEnvironment()
-
-  return ok({
-    command: commandResult.value,
-    environment,
-    fileSystem: realFileSystem,
+    return createGitIO()
+      .mapErr(() => "gitNotAvailable" as const)
+      .map((gitIO) => ({
+        command,
+        environment,
+        fileSystem: realFileSystem,
+        gitIO,
+      }))
   })
 }
 
@@ -271,9 +271,22 @@ export function createTestRuntime(
     ...fileSystem,
   }
 
+  // Mock GitIO for testing
+  const mockGitIO = {
+    clone: () => ok(undefined),
+    checkout: () => ok(undefined),
+    getCurrentSha: () => ok("abc123"),
+    getRecentCommits: () => ok([]),
+    isClean: () => ok(true),
+    pull: () => ok(undefined),
+    resolveBranchToSha: () => ok("abc123"),
+    shaExists: () => ok(true),
+  }
+
   return {
     command,
     environment: defaultEnvironment,
     fileSystem: defaultFileSystem,
+    gitIO: mockGitIO,
   }
 }

@@ -1,4 +1,5 @@
 import { Result, ok, err } from "neverthrow"
+import { type GitIO, type Error as GitIOError } from "./gitIO"
 import * as path from "path"
 import * as child_process from "child_process"
 import * as fs from "fs"
@@ -230,7 +231,7 @@ function executeConfigure(
     }))
   }
 
-  return resolveInputToSource(source).andThen((resolvedSource) =>
+  return resolveInputToSource(runtime, source).andThen((resolvedSource) =>
     loadElmJson(runtime)
       .andThen(validatePackageInElmJson)
       .andThen((elmJson) =>
@@ -265,7 +266,54 @@ function executeInstall(
 
     switch (sideloadedPackage.type) {
       case "github":
-        return cloneRepository(sideloadedPackage.url, sideloadedPackage.pinTo.sha, cacheDir)
+        const repoUrlParts = sideloadedPackage.url.split("/")
+        const author = repoUrlParts[repoUrlParts.length - 2]
+        const repoName = repoUrlParts[repoUrlParts.length - 1].replace(".git", "")
+        const cachedRepoPath = path.join(cacheDir, author, repoName)
+
+        // Check if repo is already cached
+        const ensureRepoIsCached = (): Result<string, CommandError> => {
+          if (fs.existsSync(cachedRepoPath)) {
+            // Repo exists, pull latest and checkout SHA
+            return runtime.gitIO
+              .isClean(cachedRepoPath)
+              .andThen((isClean) => {
+                if (!isClean) {
+                  return runtime.gitIO.getRecentCommits(cachedRepoPath, 5).andThen((commits) =>
+                    err({
+                      type: "dirtyRepo",
+                      status: `Repository at ${cachedRepoPath} has uncommitted changes. Recent commits:\n${commits.join("\n")}`,
+                    } as const)
+                  )
+                }
+                return ok(undefined)
+              })
+              .andThen(() => runtime.gitIO.pull(cachedRepoPath))
+              .andThen(() => runtime.gitIO.shaExists(cachedRepoPath, sideloadedPackage.pinTo.sha))
+              .andThen((shaExists) => {
+                if (!shaExists) {
+                  return runtime.gitIO.getRecentCommits(cachedRepoPath, 10).andThen((commits) =>
+                    err({
+                      type: "shaNotFound",
+                      sha: sideloadedPackage.pinTo.sha,
+                      recentCommits: commits,
+                    } as const)
+                  )
+                }
+                return ok(undefined)
+              })
+              .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
+              .map(() => cachedRepoPath)
+          } else {
+            // Repo not cached, clone it
+            return runtime.gitIO
+              .clone(sideloadedPackage.url, cachedRepoPath)
+              .andThen(() => runtime.gitIO.checkout(cachedRepoPath, sideloadedPackage.pinTo.sha))
+              .map(() => cachedRepoPath)
+          }
+        }
+
+        return ensureRepoIsCached()
           .andThen((clonedPath) =>
             copyPackageToElmHome(clonedPath, originalPackageName, originalPackageVersion, elmHomePackagesPath)
           )
@@ -274,6 +322,7 @@ function executeInstall(
             action: "sideloaded" as const,
             source: sideloadedPackage.url,
           }))
+          .mapErr((gitError) => gitError)
 
       case "relative":
         const sourcePath = path.resolve(runtime.environment.cwd, sideloadedPackage.path)
@@ -424,84 +473,57 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
 }
 
 // =============================================================================
-// Git Operations
+// Utility Functions
 // =============================================================================
 
-function resolveGitReference(url: string, reference: string): Result<string, CommandError> {
-  try {
-    // Use git ls-remote to get the SHA for the branch/tag
-    const command = `git ls-remote ${url} refs/heads/${reference}`
-    const output = child_process.execSync(command, { encoding: "utf8", stdio: "pipe" })
-
-    const lines = output.trim().split("\n")
-    if (lines.length === 0 || !lines[0]) {
-      return err("invalidGithubUrl") // Branch not found
-    }
-
-    const sha = lines[0].split("\t")[0]
-    return sha ? ok(sha) : err("invalidGithubUrl")
-  } catch (error) {
-    console.error(`Git ls-remote failed for ${url}:${reference}`, error)
-    return err("invalidGithubUrl")
-  }
-}
-
-function resolveInputToSource(input: ConfigureInput): Result<ConfigureSource, CommandError> {
+function resolveInputToSource(runtime: Runtime, input: ConfigureInput): Result<ConfigureSource, CommandError> {
   switch (input.type) {
     case "relative":
       return ok(input)
 
     case "github":
       if ("sha" in input.pinTo) {
-        // Already has SHA, convert to ConfigureSource type
-        return ok({
-          type: "github" as const,
-          url: input.url,
-          pinTo: { sha: input.pinTo.sha },
-        })
+        // Already has SHA, but still need to cache the repo
+        const cacheDir = path.join(runtime.environment.cwd, ".elm.sideload.cache")
+        const repoUrlParts = input.url.split("/")
+        const author = repoUrlParts[repoUrlParts.length - 2]
+        const repoName = repoUrlParts[repoUrlParts.length - 1].replace(".git", "")
+        const targetDir = path.join(cacheDir, author, repoName)
+        const sha = input.pinTo.sha
+
+        return runtime.gitIO
+          .clone(input.url, targetDir)
+          .andThen(() => runtime.gitIO.checkout(targetDir, sha))
+          .map(() => ({
+            type: "github" as const,
+            url: input.url,
+            pinTo: { sha },
+          }))
+          .mapErr((gitError) => gitError)
       } else {
-        // Has branch, resolve to SHA
-        return resolveGitReference(input.url, input.pinTo.branch).map((sha) => ({
-          type: "github" as const,
-          url: input.url,
-          pinTo: { sha },
-        }))
+        // Has branch, resolve to SHA and cache
+        const cacheDir = path.join(runtime.environment.cwd, ".elm.sideload.cache")
+        const repoUrlParts = input.url.split("/")
+        const author = repoUrlParts[repoUrlParts.length - 2]
+        const repoName = repoUrlParts[repoUrlParts.length - 1].replace(".git", "")
+        const targetDir = path.join(cacheDir, author, repoName)
+        const branch = input.pinTo.branch
+
+        return runtime.gitIO
+          .clone(input.url, targetDir)
+          .andThen(() => runtime.gitIO.resolveBranchToSha(targetDir, branch))
+          .andThen((sha) => runtime.gitIO.checkout(targetDir, sha).map(() => sha))
+          .map((sha) => ({
+            type: "github" as const,
+            url: input.url,
+            pinTo: { sha },
+          }))
+          .mapErr((gitError) => gitError)
       }
 
     default:
       const _: never = input
       throw new Error(`Unhandled ConfigureInput type: ${(input as any).type}`)
-  }
-}
-
-function cloneRepository(url: string, sha: string, cacheDir: string): Result<string, CommandError> {
-  try {
-    // Create unique directory name based on URL and SHA
-    const repoName = path.basename(url, ".git")
-    const cloneDir = path.join(cacheDir, `${repoName}-${sha.substring(0, 8)}`)
-
-    // Clean up existing directory if it exists
-    if (fs.existsSync(cloneDir)) {
-      fs.rmSync(cloneDir, { recursive: true, force: true })
-    }
-
-    // Clone the repository
-    child_process.execSync(`git clone ${url} ${cloneDir}`, {
-      stdio: "pipe",
-      encoding: "utf8",
-    })
-
-    // Checkout the specific SHA
-    child_process.execSync(`git checkout ${sha}`, {
-      cwd: cloneDir,
-      stdio: "pipe",
-      encoding: "utf8",
-    })
-
-    return ok(cloneDir)
-  } catch (error) {
-    console.error(`Failed to clone repository ${url} at SHA ${sha}:`, error)
-    return err("gitCloneFailed")
   }
 }
 
