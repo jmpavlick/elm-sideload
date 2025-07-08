@@ -241,4 +241,4 @@ const tests = (
 ]
 
 // ACTUALLY DO SOMETHING
-compilers.map((compiler) => toSuite(compiler)(tests))
+compilers.forEach((compiler) => toSuite(compiler)(tests))
