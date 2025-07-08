@@ -59,37 +59,9 @@ updating your sideload configuration:
 
 applying your sideload configuration:
 
-  elm-sideload install
-      INTERACTIVELY apply the 'elm.sideload.json' configuration. This is the step that actually copies or overwrites files.
-      Running this command will:
-        - Check for an 'elm.sideload.json'; if one does not exist, it will signal adversity and exit
-        - Check to see if you have an '$ELM_HOME' set, and:
-          - If you have an '$ELM_HOME' set, print its value
-          - If you do _not_ have an '$ELM_HOME' set, print the value of the directory that it intends to write to
-        - Check for the 'elm.json' in your 'elm.sideload.json'; if it does not exist, it will signal adversity and exit
-        - If you have set 'requireElmHome: true' in your 'elm.sideload.json':
-          - It will use the path as constructed from '$ELM_HOME'; if you set 'requireElmHome: true' and
-            the program runs in a shell without '$ELM_HOME' set, it will signal adversity and exit.
-        - Verify sideloads:
-          - Download any remote sideloaded packages that are not yet in '.elm.sideload.cache' and validate that versions matching the SHAs
-            in your elm.sideload.config are available
-          - For 'relative' packages, ensure that the references are present in their directories and ensure that they are well-formed (i.e., Elm packages with an 'elm.json' in the referenced directory)
-          - This step will perform all validations and fail if any of these dependencies are not available
-        - If the program is still running at this point, IT WILL ASK YOU TO CONFIRM! that you DO IN FACT want to overwrite the target packages
-          with your sideloads. It will time out, signal adversity, and exit if a response is not provided quickly enough.
-          - If you intentionally decline, the program will exit signaling success.
-          - If you accept, the program will continue.
-        - The program will then:
-          - Apply all cached sideloaded packages
-          - Print a summary of the packages that it changed
-        - If any of your sideloads:
-          - Are not in cache, or
-          - Fail to download, or
-          - Are not accessible,
-          - The program will exit, signaling adversity with a list of which packages were available to sideload, and which packages weren't
-
   elm-sideload install --always
-      Apply the 'elm.sideload.json' without asking for permission. Does all of the above checks, and fails if any of them fail.
+      Apply the 'elm.sideload.json' without asking for permission. Verifies that all sources and destinations exist and verifies SHAs if necessary,
+      and fails if any checks fail.
 
   elm-sideload install --dry-run
       Does everything _except_ overwrite files at the end; doesn't prompt for input.
@@ -122,6 +94,11 @@ export function executeCommand(runtime: Runtime): ResultAsync<ExecutionResult, C
 
     case "install":
       const { mode } = runtime.command
+      if (mode === "interactive") {
+        throw new Error(
+          "Sorry, haven't gotten around to the interactive-mode install experience yet - use the `--always` flag for now, please."
+        )
+      }
       return executeInstall(runtime, mode)
 
     case "unload":
@@ -440,7 +417,10 @@ function executeUnload(runtime: Runtime): ResultAsync<ExecutionResult, CommandEr
         action: "restored" as const,
         source: "official package repository",
       }))
-      .mapErr(() => "packageCopyFailed" as const)
+      .mapErr((err) => {
+        console.error(err)
+        return "unloadFailed" as const
+      })
   }
 
   const performUnload = (
@@ -572,7 +552,10 @@ function copyPackageToElmHome(
       .andThen(() => runtime.fileSystem.copyDirectoryRecursive(sourcePath, targetDir))
       .andThen(() => runtime.fileSystem.writeFile(path.join(targetDir, ".elm-sideload"), ""))
       .map(() => targetDir)
-      .mapErr(() => "packageCopyFailed" as const)
+      .mapErr((err) => {
+        console.error(err)
+        return "packageCopyFailed" as const
+      })
   )
 }
 

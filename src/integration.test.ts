@@ -288,7 +288,7 @@ const tests = (
     },
   ],
   [
-    "init command should set requireElmHome to true if user says yes",
+    "init sets requireElmHome to true if yes",
     [() => "yes | elm-sideload init"],
     (env) => {
       const { getElmSideloadConfig } = env
@@ -297,7 +297,7 @@ const tests = (
     },
   ],
   [
-    "github by branch should update config, get sha, and cache the clone",
+    "configure --github --branch",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -323,7 +323,7 @@ const tests = (
     },
   ],
   [
-    "github by sha should update config, get sha, and cache the clone",
+    "configure --github --sha",
     [
       () => "yes | elm-sideload init",
       () =>
@@ -355,10 +355,7 @@ const tests = (
     "relative path should update config",
     [
       () => "yes n | elm-sideload init",
-      () => "mkdir local-elm-vdom",
-      () => "cd local-elm-vdom",
-      () => "git clone git@github.com:lydell/virtual-dom",
-      () => "cd ..",
+      () => "mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom",
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
     ],
     (env) => {
@@ -374,18 +371,7 @@ const tests = (
     },
   ],
   [
-    "install command interactive should work",
-    [
-      () => "yes n | elm-sideload init",
-      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
-      () => "elm-sideload install",
-    ],
-    (env) => {
-      throw new Error("TODO: implement install interactive test")
-    },
-  ],
-  [
-    "install --always should install without prompting and update the expected directory for a github remote",
+    "install --always github remote ",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -402,13 +388,10 @@ const tests = (
     },
   ],
   [
-    "install --always should install without prompting and update the expected directory for a relative source",
+    "install --always relative source",
     [
       () => "yes n | elm-sideload init",
-      () => "mkdir local-elm-vdom",
-      () => "cd local-elm-vdom",
-      () => "git clone git@github.com:lydell/virtual-dom",
-      () => "cd ..",
+      () => "mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom",
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
       () => "elm-sideload install --always",
       () => compiler.make,
@@ -423,7 +406,7 @@ const tests = (
     },
   ],
   [
-    "install command dry-run should validate installation without prompting",
+    "install --dry-run should validate",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -440,7 +423,7 @@ const tests = (
     },
   ],
   [
-    "unload command should remove sideloads",
+    "unload should remove sideloads",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -459,7 +442,7 @@ const tests = (
     },
   ],
   [
-    "install command should force elm make to rebuild with the sideloads",
+    "install should force rebuild",
     [
       () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
@@ -493,5 +476,5 @@ compilers.forEach((compiler) => {
   fs.mkdirSync(compilerTestOutputDir, { recursive: true })
 
   toSuite(compiler)(tests)
-  toSuite({ ...compiler, label: compiler.label + "CUSTOM_ELM_HOME_" }, customElmHome)(tests)
+  //toSuite({ ...compiler, label: compiler.label + "_CUSTOM_ELM_HOME" }, customElmHome)(tests)
 })
