@@ -53,8 +53,12 @@ export interface Runtime {
   userIO: UserIOAdapter
 }
 
+export type ElmHome =
+  | { type: "fromShellEnv"; elmHome: string; packagesPath: string }
+  | { type: "fromOsDefault"; elmHome: string; packagesPath: string }
+
 export interface Environment {
-  elmHome: string | undefined
+  elmHome: ElmHome
   cwd: string
   hasElmJson: boolean
   hasSideloadConfig: boolean

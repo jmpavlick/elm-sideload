@@ -99,20 +99,14 @@ const realUserIO: UserIOAdapter = {
 // Environment Detection
 // =============================================================================
 
-function getElmHome(): string {
-  const maybeCustomHome = process.env.ELM_HOME
-  if (maybeCustomHome) {
-    return maybeCustomHome
-  }
-
+function getDefaultElmHome(): string {
+  const os = require("os")
   const platform = os.platform()
-  const homeDir = os.homedir()
 
-  switch (platform) {
-    case "win32":
-      return path.join(process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"), "elm")
-    default:
-      return path.join(homeDir, ".elm")
+  if (platform === "win32") {
+    return path.join(os.homedir(), "AppData", "Roaming", "elm")
+  } else {
+    return path.join(os.homedir(), ".elm")
   }
 }
 
@@ -120,12 +114,25 @@ function createEnvironment(): Environment {
   const cwd = process.cwd()
   const elmJsonPath = path.join(cwd, "elm.json")
   const sideloadConfigPath = path.join(cwd, "elm.sideload.json")
+  const envElmHome = process.env.ELM_HOME
+
+  const elmHome = envElmHome
+    ? {
+        type: "fromShellEnv" as const,
+        elmHome: envElmHome,
+        packagesPath: path.join(envElmHome, "0.19.1", "packages"),
+      }
+    : {
+        type: "fromOsDefault" as const,
+        elmHome: getDefaultElmHome(),
+        packagesPath: path.join(getDefaultElmHome(), "0.19.1", "packages"),
+      }
 
   // Local environment variable store
   const envVars = new Map<string, string | undefined>()
 
   return {
-    elmHome: getElmHome(),
+    elmHome,
     cwd,
     hasElmJson: fs.existsSync(elmJsonPath),
     hasSideloadConfig: fs.existsSync(sideloadConfigPath),
@@ -272,7 +279,11 @@ export function createTestRuntime(
   userIO: UserIOAdapter
 ): Runtime {
   const defaultEnvironment: Environment = {
-    elmHome: "/test/elm",
+    elmHome: {
+      type: "fromOsDefault",
+      elmHome: "/test/elm",
+      packagesPath: "/test/elm/0.19.1/packages",
+    },
     cwd: "/test/project",
     hasElmJson: true,
     hasSideloadConfig: false,

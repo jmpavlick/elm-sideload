@@ -150,11 +150,18 @@ function executeInit(runtime: Runtime): ResultAsync<ExecutionResult, CommandErro
         : okAsync(undefined)
 
   const promptForElmHome = (): ResultAsync<boolean, CommandError> => {
-    const envElmHome = runtime.environment.getEnv("ELM_HOME")
     const { elmHome } = runtime.environment
-    const message = !!envElmHome
-      ? `An ELM_HOME was found at: ${envElmHome}\nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
-      : `No ELM_HOME was found; defaulting to ${elmHome} in this environment. \nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
+    let message: string
+    switch (elmHome.type) {
+      case "fromShellEnv":
+        message = `An ELM_HOME was found at: ${elmHome.elmHome}\nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
+        console.log(`Reading ELM_HOME from shell environment: ${elmHome.elmHome}`)
+        break
+      case "fromOsDefault":
+        message = `No ELM_HOME was found; defaulting to ${elmHome.elmHome} in this environment. \nShould elm-sideload require ELM_HOME to be set in all environments? (Y/n) `
+        console.log(`No ELM_HOME found in shell environment; using OS default: ${elmHome.elmHome}`)
+        break
+    }
 
     return runtime.userIO.prompt(message).map((answer) => {
       return answer.toLowerCase().trim().startsWith("y")
@@ -370,8 +377,15 @@ function executeInstall(
 
   return validateElmJsonExists()
     .andThen(() => loadSideloadConfig(runtime))
-    .andThen((config) =>
-      getElmHomePackagesPath(runtime, config).andThen((elmHomePackagesPath) =>
+    .andThen((config) => {
+      const { elmHome } = runtime.environment
+      const elmHomePackagesPath = config.requireElmHome
+        ? elmHome.type === "fromShellEnv"
+          ? ok(elmHome.packagesPath)
+          : err("noElmHome" as const)
+        : ok(elmHome.packagesPath)
+
+      return elmHomePackagesPath.asyncAndThen((packagesPath) =>
         ensureCacheDirectory().andThen((cacheDir) =>
           mode === "dry-run"
             ? ok(
@@ -384,12 +398,12 @@ function executeInstall(
                       : sideload.sideloadedPackage.path,
                 }))
               )
-            : performInstallation(config, cacheDir, elmHomePackagesPath).andThen((output) =>
+            : performInstallation(config, cacheDir, packagesPath).andThen((output) =>
                 bustElmCache(runtime).map(() => output)
               )
         )
       )
-    )
+    })
     .map(createResult)
 }
 
@@ -441,11 +455,18 @@ function executeUnload(runtime: Runtime): ResultAsync<ExecutionResult, CommandEr
   }
 
   return loadSideloadConfig(runtime)
-    .andThen((config) =>
-      getElmHomePackagesPath(runtime, config).andThen((elmHomePackagesPath) =>
-        bustElmCache(runtime).andThen(() => performUnload(config, elmHomePackagesPath))
+    .andThen((config) => {
+      const { elmHome } = runtime.environment
+      const elmHomePackagesPath = config.requireElmHome
+        ? elmHome.type === "fromShellEnv"
+          ? ok(elmHome.packagesPath)
+          : err("noElmHome" as const)
+        : ok(elmHome.packagesPath)
+
+      return elmHomePackagesPath.asyncAndThen((packagesPath) =>
+        bustElmCache(runtime).andThen(() => performUnload(config, packagesPath))
       )
-    )
+    })
     .map((changes) => ({
       message: `Successfully unloaded ${changes.length} sideloads`,
       changes,
@@ -553,41 +574,6 @@ function copyPackageToElmHome(
       .map(() => targetDir)
       .mapErr(() => "packageCopyFailed" as const)
   )
-}
-
-function getDefaultElmHome(): string {
-  const os = require("os")
-  const platform = os.platform()
-
-  if (platform === "win32") {
-    return path.join(os.homedir(), "AppData", "Roaming", "elm")
-  } else {
-    return path.join(os.homedir(), ".elm")
-  }
-}
-
-function getElmHomePath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
-  const envElmHome = runtime.environment.getEnv("ELM_HOME")
-
-  if (envElmHome) {
-    return runtime.fileSystem.exists(envElmHome).andThen((exists) => {
-      if (exists) {
-        return okAsync(envElmHome)
-      } else {
-        return errAsync("elmHomePathNotFound" as const)
-      }
-    })
-  } else {
-    if (config.requireElmHome) {
-      return errAsync("noElmHome" as const)
-    } else {
-      return okAsync(getDefaultElmHome())
-    }
-  }
-}
-
-function getElmHomePackagesPath(runtime: Runtime, config: SideloadConfig): ResultAsync<string, CommandError> {
-  return getElmHomePath(runtime, config).map((elmHome) => path.join(elmHome, "0.19.1", "packages"))
 }
 
 // =============================================================================

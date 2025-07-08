@@ -139,7 +139,8 @@ describe("createTestRuntime", () => {
     const runtime = createTestRuntime(command, {}, {}, mockUserIO)
 
     expect(runtime.command).toEqual(command)
-    expect(runtime.environment.elmHome).toBe("/test/elm")
+    expect(runtime.environment.elmHome.elmHome).toBe("/test/elm")
+    expect(runtime.environment.elmHome.type).toBe("fromOsDefault")
     expect(runtime.environment.cwd).toBe("/test/project")
     expect(runtime.environment.hasElmJson).toBe(true)
     expect(runtime.environment.hasSideloadConfig).toBe(false)
@@ -147,10 +148,15 @@ describe("createTestRuntime", () => {
 
   it("should allow overriding environment values", () => {
     const command: Command = { type: "init" }
+    const customElmHome = {
+      type: "fromShellEnv" as const,
+      elmHome: "/custom/elm",
+      packagesPath: "/custom/elm/0.19.1/packages",
+    }
     const runtime = createTestRuntime(
       command,
       {
-        elmHome: "/custom/elm",
+        elmHome: customElmHome,
         hasElmJson: false,
         hasSideloadConfig: true,
       },
@@ -158,7 +164,7 @@ describe("createTestRuntime", () => {
       mockUserIO
     )
 
-    expect(runtime.environment.elmHome).toBe("/custom/elm")
+    expect(runtime.environment.elmHome).toEqual(customElmHome)
     expect(runtime.environment.hasElmJson).toBe(false)
     expect(runtime.environment.hasSideloadConfig).toBe(true)
   })

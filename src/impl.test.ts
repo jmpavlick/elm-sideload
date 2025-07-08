@@ -19,7 +19,7 @@ describe("executeCommand", () => {
     expect(result.message).toContain("elm-sideload: congratulations")
   })
 
-  it("should execute init command successfully", async () => {
+  it("should execute init command successfully with default Elm home", async () => {
     const command: Command = { type: "init" }
     const fileSystemWrites: Record<string, string> = {}
     const cwd = "/test/project"
@@ -53,6 +53,44 @@ describe("executeCommand", () => {
     const config = JSON.parse(fileSystemWrites[expectedSideloadPath])
     expect(config.requireElmHome).toBe(false)
     expect(fileSystemWrites[expectedGitignorePath]).toContain(".elm.sideload.cache")
+  })
+
+  it("should execute init command successfully with shell Elm home", async () => {
+    const command: Command = { type: "init" }
+    const fileSystemWrites: Record<string, string> = {}
+    const cwd = "/test/project"
+    const elmHome = "/shell/elm/home"
+
+    const runtime = createTestRuntime(
+      command,
+      {
+        hasElmJson: true,
+        hasSideloadConfig: false,
+        cwd,
+        elmHome: {
+          type: "fromShellEnv",
+          elmHome,
+          packagesPath: path.join(elmHome, "0.19.1", "packages"),
+        },
+      },
+      {
+        readFile: () => okAsync(""), // Mock reading .gitignore
+        writeFile: (filePath: string, content: string) => {
+          fileSystemWrites[filePath] = content
+          return okAsync(undefined)
+        },
+      },
+      {
+        prompt: (message: string) => okAsync("y"),
+      }
+    )
+
+    const result = (await executeCommand(runtime))._unsafeUnwrap()
+
+    const expectedSideloadPath = path.join(cwd, "elm.sideload.json")
+    expect(fileSystemWrites[expectedSideloadPath]).toBeDefined()
+    const config = JSON.parse(fileSystemWrites[expectedSideloadPath])
+    expect(config.requireElmHome).toBe(true)
   })
 
   it("should fail init command when elm.json is missing", async () => {
