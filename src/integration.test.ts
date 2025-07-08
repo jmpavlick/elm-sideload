@@ -277,25 +277,34 @@ const tests = (
   ],
   [
     "init command should work",
-    [() => "elm-sideload init"],
+    [() => "yes | elm-sideload init"],
     (env) => {
       const { getStdout, getElmSideloadConfig } = env
       const stdout = getStdout()
       const elmSideloadConfig = getElmSideloadConfig()
 
       expect(stdout).toContain("Created elm.sideload.json, .elm.sideload.cache directory, and updated .gitignore")
+      expect(JSON.parse(elmSideloadConfig).requireElmHome).toBe(true)
+    },
+  ],
+  [
+    "init command should set requireElmHome to true if user says yes",
+    [() => "yes | elm-sideload init"],
+    (env) => {
+      const { getElmSideloadConfig } = env
+      const elmSideloadConfig = getElmSideloadConfig()
+      expect(JSON.parse(elmSideloadConfig).requireElmHome).toBe(true)
     },
   ],
   [
     "github by branch should update config, get sha, and cache the clone",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
     ],
     (env) => {
       // setup
-      const { runCmd, getStdout, getElmSideloadConfig, elmSideloadCacheDir } = env
-      const stdout = getStdout()
+      const { runCmd, getElmSideloadConfig, elmSideloadCacheDir } = env
       const elmSideloadConfig = JSON.parse(getElmSideloadConfig())
 
       // Get the actual SHA from the cached git repo
@@ -316,6 +325,7 @@ const tests = (
   [
     "github by sha should update config, get sha, and cache the clone",
     [
+      () => "yes | elm-sideload init",
       () =>
         "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha 8c20e5b9f309e82e67284669f3740132a2a4d9d6",
     ],
@@ -355,7 +365,7 @@ const tests = (
   [
     "install command interactive should work",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
       () => "elm-sideload install",
     ],
@@ -366,7 +376,7 @@ const tests = (
   [
     "install --always should install without prompting and update the expected directory",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
       () => "elm-sideload install --always",
       () => compiler.make,
@@ -383,7 +393,7 @@ const tests = (
   [
     "install command dry-run should validate installation without prompting",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
       () => "elm-sideload install --dry-run",
       () => compiler.make,
@@ -400,7 +410,7 @@ const tests = (
   [
     "unload command should remove sideloads",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
       () => "elm-sideload install --always",
       () => compiler.make,
@@ -419,7 +429,7 @@ const tests = (
   [
     "install command should force elm make to rebuild with the sideloads",
     [
-      () => "elm-sideload init",
+      () => "yes n | elm-sideload init",
       () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
       () => compiler.make,
       () => "elm-sideload install --always",

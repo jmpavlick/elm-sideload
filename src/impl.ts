@@ -1,5 +1,4 @@
 import { Result, ResultAsync, ok, err, okAsync, errAsync } from "neverthrow"
-import { type GitIO, type Error as GitIOError } from "./gitIO"
 import * as path from "path"
 import {
   Runtime,
@@ -146,9 +145,20 @@ function executeInit(runtime: Runtime): ResultAsync<ExecutionResult, CommandErro
         ? errAsync("noElmJsonFound")
         : okAsync(undefined)
 
-  const createDefaultConfig = (): SideloadConfig => ({
+  const promptForElmHome = (): ResultAsync<boolean, CommandError> => {
+    const { elmHome } = runtime.environment
+    const message = elmHome
+      ? `An ELM_HOME was found at: ${elmHome}\nShould elm-sideload require ELM_HOME to be set? (Y/n) `
+      : `No ELM_HOME was found.\nShould elm-sideload require ELM_HOME to be set? (Y/n) `
+
+    return runtime.userIO.prompt(message).map((answer) => {
+      return answer.toLowerCase().trim().startsWith("y")
+    })
+  }
+
+  const createConfig = (requireElmHome: boolean): SideloadConfig => ({
     elmJsonPath: "elm.json",
-    requireElmHome: false,
+    requireElmHome,
     sideloads: [],
   })
 
@@ -174,9 +184,7 @@ function executeInit(runtime: Runtime): ResultAsync<ExecutionResult, CommandErro
       }))
   }
 
-  return validateInitConditions()
-    .map(() => createDefaultConfig())
-    .andThen(writeConfigAndCreateCache)
+  return validateInitConditions().andThen(promptForElmHome).map(createConfig).andThen(writeConfigAndCreateCache)
 }
 
 // =============================================================================
@@ -190,15 +198,6 @@ function executeConfigure(
 ): ResultAsync<ExecutionResult, CommandError> {
   const validatePackageInElmJson = (elmJson: ElmJson): ResultAsync<ElmJson, CommandError> =>
     checkPackageInElmJson(elmJson, packageName) ? okAsync(elmJson) : errAsync("packageNotFoundInElmJson")
-
-  const getOrCreateSideloadConfig = (): ResultAsync<SideloadConfig, CommandError> =>
-    loadSideloadConfig(runtime).orElse(() =>
-      ok({
-        elmJsonPath: "elm.json",
-        requireElmHome: false,
-        sideloads: [],
-      })
-    )
 
   const createRegistration = (
     elmJson: ElmJson,
@@ -235,7 +234,7 @@ function executeConfigure(
     loadElmJson(runtime)
       .andThen(validatePackageInElmJson)
       .andThen((elmJson) =>
-        getOrCreateSideloadConfig().andThen((config) => createRegistration(elmJson, config, resolvedSource))
+        loadSideloadConfig(runtime).andThen((config) => createRegistration(elmJson, config, resolvedSource))
       )
       .andThen(saveConfig)
   )

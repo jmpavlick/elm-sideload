@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest"
 import { parseArgs, createTestRuntime } from "./cli"
-import { Command, ConfigureCommand, InstallCommand } from "./types"
+import { Command, ConfigureCommand, InstallCommand, UserIOAdapter } from "./types"
+import { okAsync } from "neverthrow"
+
+const mockUserIO: UserIOAdapter = {
+  prompt: (message: string) => okAsync(""),
+}
 
 describe("parseArgs", () => {
   it("should parse help command when no args provided", () => {
@@ -131,7 +136,7 @@ describe("parseArgs", () => {
 describe("createTestRuntime", () => {
   it("should create a test runtime with defaults", () => {
     const command: Command = { type: "help" }
-    const runtime = createTestRuntime(command)
+    const runtime = createTestRuntime(command, {}, {}, mockUserIO)
 
     expect(runtime.command).toEqual(command)
     expect(runtime.environment.elmHome).toBe("/test/elm")
@@ -142,11 +147,16 @@ describe("createTestRuntime", () => {
 
   it("should allow overriding environment values", () => {
     const command: Command = { type: "init" }
-    const runtime = createTestRuntime(command, {
-      elmHome: "/custom/elm",
-      hasElmJson: false,
-      hasSideloadConfig: true,
-    })
+    const runtime = createTestRuntime(
+      command,
+      {
+        elmHome: "/custom/elm",
+        hasElmJson: false,
+        hasSideloadConfig: true,
+      },
+      {},
+      mockUserIO
+    )
 
     expect(runtime.environment.elmHome).toBe("/custom/elm")
     expect(runtime.environment.hasElmJson).toBe(false)

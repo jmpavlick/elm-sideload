@@ -4,6 +4,7 @@ import * as os from "os"
 import * as path from "path"
 import * as fs from "fs"
 import { promises as fsAsync } from "fs"
+import * as readline from "readline"
 import { createGitIO } from "./gitIO"
 import {
   Command,
@@ -18,6 +19,7 @@ import {
   InstallCommand,
   UnloadCommand,
   ConfigureInput,
+  UserIOAdapter,
 } from "./types"
 
 // =============================================================================
@@ -61,6 +63,29 @@ const realFileSystem: FileSystemAdapter = {
 
   copyDirectoryRecursive: (source: string, target: string) => {
     return ResultAsync.fromPromise(fsAsync.cp(source, target, { recursive: true }), () => "copyError" as const)
+  },
+}
+
+// =============================================================================
+// Real User IO Adapter
+// =============================================================================
+
+const realUserIO: UserIOAdapter = {
+  prompt: (message: string) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    })
+
+    return ResultAsync.fromPromise(
+      new Promise<string>((resolve) => {
+        rl.question(message, (answer) => {
+          rl.close()
+          resolve(answer)
+        })
+      }),
+      () => "promptFailed" as const
+    )
   },
 }
 
@@ -225,6 +250,7 @@ export function createRuntime(argv: string[]): ResultAsync<Runtime, RuntimeError
         environment: createEnvironment(),
         fileSystem: realFileSystem,
         gitIO,
+        userIO: realUserIO,
       }))
   )
 }
@@ -236,7 +262,8 @@ export function createRuntime(argv: string[]): ResultAsync<Runtime, RuntimeError
 export function createTestRuntime(
   command: Command,
   environment: Partial<Environment> = {},
-  fileSystem: Partial<FileSystemAdapter> = {}
+  fileSystem: Partial<FileSystemAdapter> = {},
+  userIO: UserIOAdapter
 ): Runtime {
   const defaultEnvironment: Environment = {
     elmHome: "/test/elm",
@@ -277,10 +304,15 @@ export function createTestRuntime(
     shaExists: () => ResultAsync.fromSafePromise(Promise.resolve(true)),
   }
 
+  const mockUserIO: UserIOAdapter = userIO || {
+    prompt: (message: string) => (input: string) => ResultAsync.fromSafePromise(Promise.resolve(input)),
+  }
+
   return {
     command,
     environment: defaultEnvironment,
     fileSystem: defaultFileSystem,
     gitIO: mockGitIO,
+    userIO: mockUserIO,
   }
 }

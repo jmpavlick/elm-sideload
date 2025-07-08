@@ -50,6 +50,7 @@ export interface Runtime {
   environment: Environment
   fileSystem: FileSystemAdapter
   gitIO: GitIO
+  userIO: UserIOAdapter
 }
 
 export interface Environment {
@@ -110,8 +111,18 @@ export type FileSystemAdapter = {
 }
 
 // =============================================================================
+// User IO Adapter
+// =============================================================================
+
+export type UserIOAdapter = {
+  prompt: (message: string) => ResultAsync<string, UserIOError>
+}
+
+// =============================================================================
 // Error Types
 // =============================================================================
+
+export type UserIOError = "promptFailed"
 
 export type FileError =
   | "fileNotFound"
@@ -135,7 +146,7 @@ export type ValidationError =
 
 export type RuntimeError = "noElmHome" | "couldNotCreateRuntime" | "invalidArguments" | "gitNotAvailable"
 
-export type CommandError = FileError | ValidationError | RuntimeError | GitIOError
+export type CommandError = FileError | ValidationError | RuntimeError | GitIOError | UserIOError
 
 // =============================================================================
 // Execution Results

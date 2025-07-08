@@ -3,12 +3,16 @@ import { okAsync, errAsync } from "neverthrow"
 import path from "path"
 import { executeCommand } from "./impl"
 import { createTestRuntime } from "./cli"
-import { Command, SideloadConfig } from "./types"
+import { Command, SideloadConfig, UserIOAdapter } from "./types"
+
+const mockUserIO: UserIOAdapter = {
+  prompt: (message: string) => okAsync("n"),
+}
 
 describe("executeCommand", () => {
   it("should execute help command", async () => {
     const command: Command = { type: "help" }
-    const runtime = createTestRuntime(command)
+    const runtime = createTestRuntime(command, {}, {}, mockUserIO)
 
     const result = (await executeCommand(runtime))._unsafeUnwrap()
 
@@ -33,6 +37,9 @@ describe("executeCommand", () => {
           fileSystemWrites[filePath] = content
           return okAsync(undefined)
         },
+      },
+      {
+        prompt: (message: string) => okAsync("n"),
       }
     )
 
@@ -43,15 +50,22 @@ describe("executeCommand", () => {
 
     expect(result.message).toContain("Created elm.sideload.json")
     expect(fileSystemWrites[expectedSideloadPath]).toBeDefined()
+    const config = JSON.parse(fileSystemWrites[expectedSideloadPath])
+    expect(config.requireElmHome).toBe(false)
     expect(fileSystemWrites[expectedGitignorePath]).toContain(".elm.sideload.cache")
   })
 
   it("should fail init command when elm.json is missing", async () => {
     const command: Command = { type: "init" }
-    const runtime = createTestRuntime(command, {
-      hasElmJson: false,
-      hasSideloadConfig: false,
-    })
+    const runtime = createTestRuntime(
+      command,
+      {
+        hasElmJson: false,
+        hasSideloadConfig: false,
+      },
+      {},
+      mockUserIO
+    )
 
     const error = (await executeCommand(runtime))._unsafeUnwrapErr()
     expect(error).toBe("noElmJsonFound")
@@ -59,10 +73,15 @@ describe("executeCommand", () => {
 
   it("should fail init command when sideload config already exists", async () => {
     const command: Command = { type: "init" }
-    const runtime = createTestRuntime(command, {
-      hasElmJson: true,
-      hasSideloadConfig: true,
-    })
+    const runtime = createTestRuntime(
+      command,
+      {
+        hasElmJson: true,
+        hasSideloadConfig: true,
+      },
+      {},
+      mockUserIO
+    )
 
     const error = (await executeCommand(runtime))._unsafeUnwrapErr()
     expect(error).toBe("invalidSideloadConfig")
@@ -89,6 +108,12 @@ describe("executeCommand", () => {
       },
     }
 
+    const mockSideloadConfig: SideloadConfig = {
+      elmJsonPath: "elm.json",
+      requireElmHome: false,
+      sideloads: [],
+    }
+
     // Track GitIO calls
     const gitIOCalls: string[] = []
     const mockGitIO = {
@@ -112,7 +137,7 @@ describe("executeCommand", () => {
       command,
       {
         hasElmJson: true,
-        hasSideloadConfig: false,
+        hasSideloadConfig: true,
         cwd: "/test/project",
       },
       {
@@ -120,9 +145,13 @@ describe("executeCommand", () => {
           if (path.endsWith("elm.json")) {
             return okAsync(JSON.stringify(mockElmJson))
           }
+          if (path.endsWith("elm.sideload.json")) {
+            return okAsync(JSON.stringify(mockSideloadConfig))
+          }
           return errAsync("fileNotFound" as const)
         },
-      }
+      },
+      mockUserIO
     )
 
     // Override the mock GitIO
@@ -158,6 +187,12 @@ describe("executeCommand", () => {
       },
     }
 
+    const mockSideloadConfig: SideloadConfig = {
+      elmJsonPath: "elm.json",
+      requireElmHome: false,
+      sideloads: [],
+    }
+
     // Track GitIO calls
     const gitIOCalls: string[] = []
     const mockGitIO = {
@@ -184,7 +219,7 @@ describe("executeCommand", () => {
       command,
       {
         hasElmJson: true,
-        hasSideloadConfig: false,
+        hasSideloadConfig: true,
         cwd: "/test/project",
       },
       {
@@ -192,9 +227,13 @@ describe("executeCommand", () => {
           if (path.endsWith("elm.json")) {
             return okAsync(JSON.stringify(mockElmJson))
           }
+          if (path.endsWith("elm.sideload.json")) {
+            return okAsync(JSON.stringify(mockSideloadConfig))
+          }
           return errAsync("fileNotFound" as const)
         },
-      }
+      },
+      mockUserIO
     )
 
     // Override the mock GitIO
@@ -243,7 +282,8 @@ describe("executeCommand", () => {
           }
           return errAsync("fileNotFound" as const)
         },
-      }
+      },
+      mockUserIO
     )
 
     const result = (await executeCommand(runtime))._unsafeUnwrap()
@@ -277,7 +317,8 @@ describe("executeCommand", () => {
           }
           return errAsync("fileNotFound" as const)
         },
-      }
+      },
+      mockUserIO
     )
 
     const result = (await executeCommand(runtime))._unsafeUnwrap()
