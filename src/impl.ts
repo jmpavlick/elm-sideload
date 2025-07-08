@@ -358,21 +358,6 @@ function executeInstall(
     return ok(changes)
   }
 
-  const bustElmCache = (): Result<void, CommandError> => {
-    const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", "0.19.1")
-
-    try {
-      if (fs.existsSync(elmStuffPath)) {
-        console.log("Deleting elm-stuff/0.19.1 to bust compilation cache...")
-        fs.rmSync(elmStuffPath, { recursive: true, force: true })
-      }
-      return ok(undefined)
-    } catch (error) {
-      console.error(`Failed to delete elm-stuff cache:`, error)
-      return err("writeError")
-    }
-  }
-
   const createResult = (changes: AppliedChange[]): ExecutionResult => ({
     success: true,
     message:
@@ -398,7 +383,9 @@ function executeInstall(
                       : sideload.sideloadedPackage.path,
                 }))
               )
-            : bustElmCache().andThen(() => performInstallation(config, cacheDir, elmHomePackagesPath))
+            : performInstallation(config, cacheDir, elmHomePackagesPath).andThen((output) =>
+                bustElmCache(runtime).map(() => output)
+              )
         )
       )
     )
@@ -422,6 +409,8 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
       }
 
       const packageDir = path.join(elmHomePackagesPath, author, name, version)
+
+      console.log(`Deleting sideloaded package at ${packageDir} to force the compiler to re-download the package...`)
 
       if (fs.existsSync(packageDir)) {
         fs.rmSync(packageDir, { recursive: true, force: true })
@@ -462,7 +451,7 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
   return loadSideloadConfig(runtime)
     .andThen((config) =>
       getElmHomePackagesPath(runtime, config).andThen((elmHomePackagesPath) =>
-        performUnload(config, elmHomePackagesPath)
+        bustElmCache(runtime).andThen(() => performUnload(config, elmHomePackagesPath))
       )
     )
     .map((changes) => ({
@@ -475,6 +464,21 @@ function executeUnload(runtime: Runtime): Result<ExecutionResult, CommandError> 
 // =============================================================================
 // Utility Functions
 // =============================================================================
+
+const bustElmCache = (runtime: Runtime): Result<void, CommandError> => {
+  const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", "0.19.1")
+
+  try {
+    if (fs.existsSync(elmStuffPath)) {
+      console.log(`Deleting ${elmStuffPath} to bust compilation cache...`)
+      fs.rmSync(elmStuffPath, { recursive: true, force: true })
+    }
+    return ok(undefined)
+  } catch (error) {
+    console.error(`Failed to delete elm-stuff cache:`, error)
+    return err("writeError")
+  }
+}
 
 function resolveInputToSource(runtime: Runtime, input: ConfigureInput): Result<ConfigureSource, CommandError> {
   switch (input.type) {
