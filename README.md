@@ -9,9 +9,9 @@ A CLI tool for sideloading/overriding Elm packages from your `elm.json`.
 This is _extremely alpha_. Proceed with caution.
 
 ✅ Tested and working with `elm make`
+✅ Tested and working with elm-pages
 ❌ Not tested at all on Windows (if somebody wants to check that out, it'd be cool)
 ❌ Not tested with Lamdera
-❌ Not tested with elm-pages
 ❌ Not tested with Zokka
 
 ## installation
