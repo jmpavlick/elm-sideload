@@ -8,6 +8,10 @@ function safeStringify(value: unknown): string {
     }
 }
 
+export function formatCommitList(commits: string[]): string {
+    return commits.map((commit) => `  - ${commit}`).join("\n")
+}
+
 export function formatError(error: CommandError): string {
     if (typeof error === "string") {
         // String error codes like "noElmHome", "fileNotFound", etc.
@@ -21,7 +25,7 @@ export function formatError(error: CommandError): string {
             case "repoNotFound":
                 return `Repository not found: ${gitError.url}`
             case "shaNotFound":
-                return `SHA not found: ${gitError.sha}\nRecent commits:\n${gitError.recentCommits.join("\n")}`
+                return `SHA not found: ${gitError.sha}\n\nRecent commits:\n${formatCommitList(gitError.recentCommits)}`
             case "dirtyRepo":
                 return `Repository has uncommitted changes:\n${gitError.status}`
             case "networkError":

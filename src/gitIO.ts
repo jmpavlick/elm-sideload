@@ -129,6 +129,6 @@ export const createGitIO = (): ResultAsync<GitIO, string> => {
         .orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false))),
 
     hardReset: (repoDir: string): ResultAsync<void, Error> =>
-      runGitCommand(`git reset --hard HEAD && git clean -df`, repoDir).map(() => {}),
+      runGitCommand(`git reset --hard HEAD && git clean -df`, repoDir).map(() => { }),
   }))
 }
