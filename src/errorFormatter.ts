@@ -1,5 +1,13 @@
 import { CommandError } from "./types"
 
+function safeStringify(value: unknown): string {
+    try {
+        return JSON.stringify(value, null, 2)
+    } catch {
+        return `Unknown error: ${String(value)}`
+    }
+}
+
 export function formatError(error: CommandError): string {
     if (typeof error === "string") {
         // String error codes like "noElmHome", "fileNotFound", etc.
@@ -27,18 +35,10 @@ export function formatError(error: CommandError): string {
             case "commandError":
                 return `Git command failed (${gitError.command}): ${gitError.message}`
             default:
-                try {
-                    return JSON.stringify(error, null, 2)
-                } catch {
-                    return `Unknown error: ${String(error)}`
-                }
+                return safeStringify(error)
         }
     }
 
     // Fallback for unexpected error types
-    try {
-        return JSON.stringify(error, null, 2)
-    } catch {
-        return `Unknown error: ${String(error)}`
-    }
+    return safeStringify(error)
 }
