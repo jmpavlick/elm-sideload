@@ -309,6 +309,7 @@ export function createTestRuntime(
     pull: () => ResultAsync.fromSafePromise(Promise.resolve(undefined)),
     resolveBranchToSha: () => ResultAsync.fromSafePromise(Promise.resolve("abc123")),
     shaExists: () => ResultAsync.fromSafePromise(Promise.resolve(true)),
+    hardReset: () => ResultAsync.fromSafePromise(Promise.resolve()),
   }
 
   const mockUserIO: UserIOAdapter = userIO || {

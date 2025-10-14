@@ -31,6 +31,7 @@ export interface GitIO {
   pull: (repoDir: string) => ResultAsync<void, Error>
   resolveBranchToSha: (repoDir: string, branch: string) => ResultAsync<string, Error>
   shaExists: (repoDir: string, sha: string) => ResultAsync<boolean, Error>
+  hardReset: (repoDir: string) => ResultAsync<void, Error>
 }
 
 // =============================================================================
@@ -126,5 +127,8 @@ export const createGitIO = (): ResultAsync<GitIO, string> => {
       runGitCommand(`git cat-file -e ${sha}`, repoDir)
         .map(() => true)
         .orElse(() => ResultAsync.fromSafePromise(Promise.resolve(false))),
+
+    hardReset: (repoDir: string): ResultAsync<void, Error> =>
+      runGitCommand(`git reset --hard HEAD && git clean -df`, repoDir).map(() => {}),
   }))
 }
