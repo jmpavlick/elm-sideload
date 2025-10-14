@@ -269,12 +269,7 @@ function executeInstall(
                 .isClean(cachedRepoPath)
                 .andThen((isClean) => {
                   if (!isClean) {
-                    return runtime.gitIO.getRecentCommits(cachedRepoPath, 5).andThen((commits) =>
-                      err({
-                        type: "dirtyRepo",
-                        status: `Repository at ${cachedRepoPath} has uncommitted changes.\n\nRecent commits:\n${formatCommitList(commits)}`,
-                      } as const)
-                    )
+                    return runtime.gitIO.hardReset(cachedRepoPath)
                   }
                   return ok(undefined)
                 })
