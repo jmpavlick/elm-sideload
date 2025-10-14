@@ -14,6 +14,7 @@ import {
   ConfigureInput,
   ConfigureSource,
 } from "./types"
+import { formatCommitList } from "./errorFormatter"
 
 const helpText: string = `
 elm-sideload: congratulations, you can write javascript again
@@ -197,16 +198,16 @@ function executeConfigure(
 
     return packageVersion
       ? ok({
-          ...config,
-          sideloads: [
-            ...config.sideloads.filter((s) => s.originalPackageName !== packageName),
-            {
-              originalPackageName: packageName,
-              originalPackageVersion: packageVersion,
-              sideloadedPackage: resolvedSource,
-            },
-          ],
-        })
+        ...config,
+        sideloads: [
+          ...config.sideloads.filter((s) => s.originalPackageName !== packageName),
+          {
+            originalPackageName: packageName,
+            originalPackageVersion: packageVersion,
+            sideloadedPackage: resolvedSource,
+          },
+        ],
+      })
       : err("packageNotFoundInElmJson")
   }
 
@@ -271,7 +272,7 @@ function executeInstall(
                     return runtime.gitIO.getRecentCommits(cachedRepoPath, 5).andThen((commits) =>
                       err({
                         type: "dirtyRepo",
-                        status: `Repository at ${cachedRepoPath} has uncommitted changes. Recent commits:\n${commits.join("\n")}`,
+                        status: `Repository at ${cachedRepoPath} has uncommitted changes.\n\nRecent commits:\n${formatCommitList(commits)}`,
                       } as const)
                     )
                   }
@@ -366,18 +367,18 @@ function executeInstall(
         ensureCacheDirectory().andThen((cacheDir) =>
           mode === "dry-run"
             ? ok(
-                config.sideloads.map((sideload) => ({
-                  packageName: sideload.originalPackageName,
-                  action: "sideloaded" as const,
-                  source:
-                    sideload.sideloadedPackage.type === "github"
-                      ? sideload.sideloadedPackage.url
-                      : sideload.sideloadedPackage.path,
-                }))
-              )
+              config.sideloads.map((sideload) => ({
+                packageName: sideload.originalPackageName,
+                action: "sideloaded" as const,
+                source:
+                  sideload.sideloadedPackage.type === "github"
+                    ? sideload.sideloadedPackage.url
+                    : sideload.sideloadedPackage.path,
+              }))
+            )
             : performInstallation(config, cacheDir, packagesPath).andThen((output) =>
-                bustElmCache(runtime).map(() => output)
-              )
+              bustElmCache(runtime).map(() => output)
+            )
         )
       )
     })
