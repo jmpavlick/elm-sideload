@@ -2,6 +2,42 @@
 
 import { createRuntime } from "./cli"
 import { executeCommand } from "./impl"
+import { CommandError } from "./types"
+
+function formatError(error: CommandError): string {
+  if (typeof error === "string") {
+    // String error codes like "noElmHome", "fileNotFound", etc.
+    return error
+  }
+
+  if (typeof error === "object" && error !== null && "type" in error) {
+    // GitIOError objects with type and additional context
+    const gitError = error as any
+    switch (gitError.type) {
+      case "repoNotFound":
+        return `Repository not found: ${gitError.url}`
+      case "shaNotFound":
+        return `SHA not found: ${gitError.sha}\nRecent commits:\n${gitError.recentCommits.join("\n")}`
+      case "dirtyRepo":
+        return `Repository has uncommitted changes:\n${gitError.status}`
+      case "networkError":
+        return `Network error: ${gitError.message}`
+      case "cloneError":
+        return `Failed to clone ${gitError.url}: ${gitError.message}`
+      case "checkoutError":
+        return `Failed to checkout ${gitError.sha}: ${gitError.message}`
+      case "pullError":
+        return `Failed to pull: ${gitError.message}`
+      case "commandError":
+        return `Git command failed (${gitError.command}): ${gitError.message}`
+      default:
+        return JSON.stringify(error, null, 2)
+    }
+  }
+
+  // Fallback for unexpected error types
+  return JSON.stringify(error, null, 2)
+}
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
@@ -22,49 +58,7 @@ async function main(): Promise<void> {
         process.exit(0)
       },
       (error) => {
-        // Format error message based on error type
-        let errorMessage: string
-        
-        if (typeof error === "string") {
-          // String error codes like "noElmHome", "fileNotFound", etc.
-          errorMessage = error
-        } else if (typeof error === "object" && error !== null && "type" in error) {
-          // GitIOError objects with type and additional context
-          const gitError = error as any
-          switch (gitError.type) {
-            case "repoNotFound":
-              errorMessage = `Repository not found: ${gitError.url}`
-              break
-            case "shaNotFound":
-              errorMessage = `SHA not found: ${gitError.sha}\nRecent commits:\n${gitError.recentCommits.join("\n")}`
-              break
-            case "dirtyRepo":
-              errorMessage = `Repository has uncommitted changes:\n${gitError.status}`
-              break
-            case "networkError":
-              errorMessage = `Network error: ${gitError.message}`
-              break
-            case "cloneError":
-              errorMessage = `Failed to clone ${gitError.url}: ${gitError.message}`
-              break
-            case "checkoutError":
-              errorMessage = `Failed to checkout ${gitError.sha}: ${gitError.message}`
-              break
-            case "pullError":
-              errorMessage = `Failed to pull: ${gitError.message}`
-              break
-            case "commandError":
-              errorMessage = `Git command failed (${gitError.command}): ${gitError.message}`
-              break
-            default:
-              errorMessage = JSON.stringify(error, null, 2)
-          }
-        } else {
-          // Fallback for unexpected error types
-          errorMessage = JSON.stringify(error, null, 2)
-        }
-        
-        console.error(`Error: ${errorMessage}`)
+        console.error(`Error: ${formatError(error)}`)
         process.exit(1)
       }
     )
