@@ -2,6 +2,7 @@
 
 import { createRuntime } from "./cli"
 import { executeCommand } from "./impl"
+import { formatError } from "./errorFormatter"
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
         process.exit(0)
       },
       (error) => {
-        console.error(`Error: ${error}`)
+        console.error(`Error: ${formatError(error)}`)
         process.exit(1)
       }
     )
