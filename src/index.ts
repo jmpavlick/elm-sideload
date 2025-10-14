@@ -22,7 +22,49 @@ async function main(): Promise<void> {
         process.exit(0)
       },
       (error) => {
-        console.error(`Error: ${error}`)
+        // Format error message based on error type
+        let errorMessage: string
+        
+        if (typeof error === "string") {
+          // String error codes like "noElmHome", "fileNotFound", etc.
+          errorMessage = error
+        } else if (typeof error === "object" && error !== null && "type" in error) {
+          // GitIOError objects with type and additional context
+          const gitError = error as any
+          switch (gitError.type) {
+            case "repoNotFound":
+              errorMessage = `Repository not found: ${gitError.url}`
+              break
+            case "shaNotFound":
+              errorMessage = `SHA not found: ${gitError.sha}\nRecent commits:\n${gitError.recentCommits.join("\n")}`
+              break
+            case "dirtyRepo":
+              errorMessage = `Repository has uncommitted changes:\n${gitError.status}`
+              break
+            case "networkError":
+              errorMessage = `Network error: ${gitError.message}`
+              break
+            case "cloneError":
+              errorMessage = `Failed to clone ${gitError.url}: ${gitError.message}`
+              break
+            case "checkoutError":
+              errorMessage = `Failed to checkout ${gitError.sha}: ${gitError.message}`
+              break
+            case "pullError":
+              errorMessage = `Failed to pull: ${gitError.message}`
+              break
+            case "commandError":
+              errorMessage = `Git command failed (${gitError.command}): ${gitError.message}`
+              break
+            default:
+              errorMessage = JSON.stringify(error, null, 2)
+          }
+        } else {
+          // Fallback for unexpected error types
+          errorMessage = JSON.stringify(error, null, 2)
+        }
+        
+        console.error(`Error: ${errorMessage}`)
         process.exit(1)
       }
     )
