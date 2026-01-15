@@ -91,10 +91,10 @@ export type ElmJson = {
   dependencies: {
     direct: Record<string, string>
     indirect: Record<string, string>
-    "test-dependencies": {
-      direct: Record<string, string>
-      indirect: Record<string, string>
-    }
+  }
+  "test-dependencies": {
+    direct: Record<string, string>
+    indirect: Record<string, string>
   }
 }
 
