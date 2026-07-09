@@ -115,17 +115,23 @@ function createEnvironment(): Environment {
   const elmJsonPath = path.join(cwd, "elm.json")
   const sideloadConfigPath = path.join(cwd, "elm.sideload.json")
   const envElmHome = process.env.ELM_HOME
+  const hasElmJson = fs.existsSync(elmJsonPath)
+  const elmVersion = hasElmJson
+    ? JSON.parse(fs.readFileSync(elmJsonPath, { encoding: "utf-8" }))["elm-version"]
+    : "0.19.1"
 
   const elmHome = envElmHome
     ? {
         type: "fromShellEnv" as const,
         elmHome: envElmHome,
-        packagesPath: path.join(envElmHome, "0.19.1", "packages"),
+        elmVersion,
+        packagesPath: path.join(envElmHome, elmVersion, "packages"),
       }
     : {
         type: "fromOsDefault" as const,
         elmHome: getDefaultElmHome(),
-        packagesPath: path.join(getDefaultElmHome(), "0.19.1", "packages"),
+        elmVersion,
+        packagesPath: path.join(getDefaultElmHome(), elmVersion, "packages"),
       }
 
   // Local environment variable store
@@ -134,7 +140,7 @@ function createEnvironment(): Environment {
   return {
     elmHome,
     cwd,
-    hasElmJson: fs.existsSync(elmJsonPath),
+    hasElmJson,
     hasSideloadConfig: fs.existsSync(sideloadConfigPath),
   }
 }
@@ -280,6 +286,7 @@ export function createTestRuntime(
     elmHome: {
       type: "fromOsDefault",
       elmHome: "/test/elm",
+      elmVersion: "0.19.1",
       packagesPath: "/test/elm/0.19.1/packages",
     },
     cwd: "/test/project",

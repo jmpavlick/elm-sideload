@@ -54,8 +54,8 @@ export interface Runtime {
 }
 
 export type ElmHome =
-  | { type: "fromShellEnv"; elmHome: string; packagesPath: string }
-  | { type: "fromOsDefault"; elmHome: string; packagesPath: string }
+  | { type: "fromShellEnv"; elmHome: string; elmVersion: string; packagesPath: string }
+  | { type: "fromOsDefault"; elmHome: string; elmVersion: string; packagesPath: string }
 
 export interface Environment {
   elmHome: ElmHome
