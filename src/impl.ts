@@ -591,24 +591,24 @@ function loadSideloadConfig(runtime: Runtime): ResultAsync<SideloadConfig, Comma
 }
 
 function checkPackageInElmJson(elmJson: ElmJson, packageName: string): boolean {
-  const { dependencies } = elmJson
+  const { dependencies, ["test-dependencies"]: testDependencies } = elmJson
 
   return (
     packageName in dependencies.direct ||
     packageName in dependencies.indirect ||
-    packageName in dependencies["test-dependencies"].direct ||
-    packageName in dependencies["test-dependencies"].indirect
+    packageName in testDependencies.direct ||
+    packageName in testDependencies.indirect
   )
 }
 
 function getPackageVersion(elmJson: ElmJson, packageName: string): string | null {
-  const { dependencies } = elmJson
+  const { dependencies, ["test-dependencies"]: testDependencies } = elmJson
 
   return (
     dependencies.direct[packageName] ||
     dependencies.indirect[packageName] ||
-    dependencies["test-dependencies"].direct[packageName] ||
-    dependencies["test-dependencies"].indirect[packageName] ||
+    testDependencies.direct[packageName] ||
+    testDependencies.indirect[packageName] ||
     null
   )
 }
