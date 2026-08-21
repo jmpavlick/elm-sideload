@@ -57,6 +57,10 @@ main =
 // contains this string
 const SIDELOADS_APPLIED_SIGNAL: string = "25 000"
 
+// the commit of lydell/virtual-dom that the compile-and-assert tests pin to; the `safe` branch is a moving
+// target, and SIDELOADS_APPLIED_SIGNAL only exists at older commits like this one
+const PINNED_VDOM_SHA: string = "8c20e5b9f309e82e67284669f3740132a2a4d9d6"
+
 // project root
 const ROOT: string = process.cwd()
 // build output folder
@@ -68,7 +72,8 @@ const TEST_OUTPUT_DIR: string = path.join(ROOT, ".test")
 
 // run a command-line invocation
 const toRunCmd = (workDir: string, logFile: string, elmHome?: string) => (command: string) => {
-  const executableCommand: string = command.replace("elm-sideload ", `${BIN_PATH} `)
+  // (?= |$) so the bare `elm-sideload` help invocation is rewritten too, not just `elm-sideload <cmd>`
+  const executableCommand: string = command.replace(/elm-sideload(?= |$)/, BIN_PATH)
   process.stdout.write(`$ ${command}\n\n`)
 
   // Determine shell based on OS and environment
@@ -81,7 +86,7 @@ const toRunCmd = (workDir: string, logFile: string, elmHome?: string) => (comman
   // Build environment for subprocess
   const subprocessEnv: NodeJS.ProcessEnv = { ...process.env, PATH: `${DIST}:${process.env.PATH}` }
   if (elmHome) {
-    //subprocessEnv.ELM_HOME = elmHome
+    subprocessEnv.ELM_HOME = elmHome
   }
 
   const commandOutput = execSync(executableCommand, {
@@ -355,7 +360,7 @@ const tests = (
     "relative path should update config",
     [
       () => "yes n | elm-sideload init",
-      () => "mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom",
+      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
     ],
     (env) => {
@@ -374,7 +379,7 @@ const tests = (
     "install --always github remote ",
     [
       () => "yes n | elm-sideload init",
-      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => `elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha ${PINNED_VDOM_SHA}`,
       () => "elm-sideload install --always",
       () => compiler.make,
     ],
@@ -391,7 +396,7 @@ const tests = (
     "install --always relative source",
     [
       () => "yes n | elm-sideload init",
-      () => "mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom",
+      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
       () => "elm-sideload install --always",
       () => compiler.make,
@@ -409,7 +414,7 @@ const tests = (
     "install --dry-run should validate",
     [
       () => "yes n | elm-sideload init",
-      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => `elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha ${PINNED_VDOM_SHA}`,
       // note: since we are sometimes using a global ELM_HOME, we have to unload
       // in our setup, in case the last test installed
       () => "elm-sideload unload",
@@ -429,7 +434,7 @@ const tests = (
     "unload should remove sideloads",
     [
       () => "yes n | elm-sideload init",
-      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => `elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha ${PINNED_VDOM_SHA}`,
       () => "elm-sideload install --always",
       () => compiler.make,
       () => "elm-sideload unload",
@@ -448,7 +453,7 @@ const tests = (
     "install should force rebuild",
     [
       () => "yes n | elm-sideload init",
-      () => "elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --branch safe",
+      () => `elm-sideload configure elm/virtual-dom --github https://github.com/lydell/virtual-dom --sha ${PINNED_VDOM_SHA}`,
       () => compiler.make,
       () => "elm-sideload install --always",
       () => compiler.make,
@@ -478,6 +483,6 @@ compilers.forEach((compiler) => {
   }
   fs.mkdirSync(compilerTestOutputDir, { recursive: true })
 
-  toSuite(compiler)(tests)
-  //toSuite({ ...compiler, label: compiler.label + "_CUSTOM_ELM_HOME" }, customElmHome)(tests)
+  // always run against an isolated ELM_HOME so the tests never mutate the user's real package cache
+  toSuite(compiler, customElmHome)(tests)
 })
