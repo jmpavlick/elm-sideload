@@ -165,7 +165,7 @@ export function parseArgs(argv: string[]): Result<Command, RuntimeError> {
   program
     .name("elm-sideload")
     .description("Sideload / override Elm packages from your elm.json")
-    .version("1.0.0")
+    .version(require("../package.json").version)
     .action(() => {
       parsedCommand = { type: "help" } as HelpCommand
     })
