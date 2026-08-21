@@ -1,33 +1,75 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+# Publishes to npm whenever master's package.json version doesn't exist on the
+# registry yet. Releasing = merging a PR that bumps "version"; this workflow
+# verifies, publishes (with provenance), tags, and cuts a GitHub release.
+#
+# Auth is npm Trusted Publishing (OIDC) - no tokens, no secrets. One-time setup
+# on npmjs.com: elm-sideload -> Settings -> Trusted Publisher -> GitHub Actions,
+# with owner "jmpavlick", repository "elm-sideload", and workflow filename
+# "npm-publish.yml". If this file is ever renamed, update that setting to match.
 
-name: Node.js Package
+name: Publish to npm
 
 on:
-  release:
-    types: [created]
+  push:
+    branches: ["master"]
+
+# publishes must run one at a time, and never be cancelled mid-publish
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the release tag and create the GitHub release
+  id-token: write # mint the OIDC token that npm trusted publishing exchanges
 
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm ci
-      - run: npm test
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
 
-  publish-npm:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org/
-      - run: npm ci
-      - run: npm publish
+      - name: Decide whether to publish
+        id: version
+        run: |
+          LOCAL="$(node -p "require('./package.json').version")"
+          echo "version=${LOCAL}" >> "$GITHUB_OUTPUT"
+          # `npm view pkg@version` prints nothing (rather than erroring) when
+          # the version doesn't exist, so test the output, not the exit code
+          if [ -n "$(npm view "elm-sideload@${LOCAL}" version 2>/dev/null || true)" ]; then
+            echo "elm-sideload@${LOCAL} is already on npm; nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publishing elm-sideload@${LOCAL}"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # trusted publishing requires npm >= 11.5.1; node 22 ships npm 10
+      - if: steps.version.outputs.publish == 'true'
+        run: npm install -g npm@latest
+
+      - if: steps.version.outputs.publish == 'true'
+        run: npm ci
+
+      - if: steps.version.outputs.publish == 'true'
+        run: npm run type-check
+
+      - if: steps.version.outputs.publish == 'true'
+        run: npm test
+
+      # prepublishOnly runs the build; OIDC handles auth and provenance
+      - if: steps.version.outputs.publish == 'true'
+        run: npm publish
+
+      - if: steps.version.outputs.publish == 'true'
+        name: Tag and create GitHub release
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+          gh release create "v${{ steps.version.outputs.version }}" --generate-notes
