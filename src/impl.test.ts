@@ -70,6 +70,7 @@ describe("executeCommand", () => {
         elmHome: {
           type: "fromShellEnv",
           elmHome,
+          elmVersion: "0.19.1",
           packagesPath: path.join(elmHome, "0.19.1", "packages"),
         },
       },

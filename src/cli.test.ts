@@ -151,6 +151,7 @@ describe("createTestRuntime", () => {
     const customElmHome = {
       type: "fromShellEnv" as const,
       elmHome: "/custom/elm",
+      elmVersion: "0.19.1",
       packagesPath: "/custom/elm/0.19.1/packages",
     }
     const runtime = createTestRuntime(

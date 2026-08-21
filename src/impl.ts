@@ -454,7 +454,7 @@ function executeUnload(runtime: Runtime): ResultAsync<ExecutionResult, CommandEr
 // =============================================================================
 
 const bustElmCache = (runtime: Runtime): ResultAsync<void, CommandError> => {
-  const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", "0.19.1")
+  const elmStuffPath = path.join(runtime.environment.cwd, "elm-stuff", runtime.environment.elmHome.elmVersion)
 
   return runtime.fileSystem
     .exists(elmStuffPath)

@@ -110,22 +110,37 @@ function getDefaultElmHome(): string {
   }
 }
 
+function readElmVersion(elmJsonPath: string): string | null {
+  // Only an application-style exact version names an ELM_HOME directory;
+  // a package-style range like "0.19.0 <= v < 0.20.0" does not.
+  try {
+    const elmVersion = JSON.parse(fs.readFileSync(elmJsonPath, { encoding: "utf-8" }))["elm-version"]
+    return typeof elmVersion === "string" && /^\d+\.\d+\.\d+$/.test(elmVersion) ? elmVersion : null
+  } catch (error) {
+    return null
+  }
+}
+
 function createEnvironment(): Environment {
   const cwd = process.cwd()
   const elmJsonPath = path.join(cwd, "elm.json")
   const sideloadConfigPath = path.join(cwd, "elm.sideload.json")
   const envElmHome = process.env.ELM_HOME
+  const hasElmJson = fs.existsSync(elmJsonPath)
+  const elmVersion = (hasElmJson ? readElmVersion(elmJsonPath) : null) ?? "0.19.1"
 
   const elmHome = envElmHome
     ? {
         type: "fromShellEnv" as const,
         elmHome: envElmHome,
-        packagesPath: path.join(envElmHome, "0.19.1", "packages"),
+        elmVersion,
+        packagesPath: path.join(envElmHome, elmVersion, "packages"),
       }
     : {
         type: "fromOsDefault" as const,
         elmHome: getDefaultElmHome(),
-        packagesPath: path.join(getDefaultElmHome(), "0.19.1", "packages"),
+        elmVersion,
+        packagesPath: path.join(getDefaultElmHome(), elmVersion, "packages"),
       }
 
   // Local environment variable store
@@ -134,7 +149,7 @@ function createEnvironment(): Environment {
   return {
     elmHome,
     cwd,
-    hasElmJson: fs.existsSync(elmJsonPath),
+    hasElmJson,
     hasSideloadConfig: fs.existsSync(sideloadConfigPath),
   }
 }
@@ -280,6 +295,7 @@ export function createTestRuntime(
     elmHome: {
       type: "fromOsDefault",
       elmHome: "/test/elm",
+      elmVersion: "0.19.1",
       packagesPath: "/test/elm/0.19.1/packages",
     },
     cwd: "/test/project",
