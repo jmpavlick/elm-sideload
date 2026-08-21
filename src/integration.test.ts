@@ -360,7 +360,7 @@ const tests = (
     "relative path should update config",
     [
       () => "yes n | elm-sideload init",
-      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
+      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone https://github.com/lydell/virtual-dom.git && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
     ],
     (env) => {
@@ -396,7 +396,7 @@ const tests = (
     "install --always relative source",
     [
       () => "yes n | elm-sideload init",
-      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone git@github.com:lydell/virtual-dom && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
+      () => `mkdir ./local-elm-vdom && cd ./local-elm-vdom && git clone https://github.com/lydell/virtual-dom.git && git -C virtual-dom checkout ${PINNED_VDOM_SHA}`,
       () => "elm-sideload configure elm/virtual-dom --relative ./local-elm-vdom/virtual-dom",
       () => "elm-sideload install --always",
       () => compiler.make,
