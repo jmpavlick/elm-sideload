@@ -110,15 +110,24 @@ function getDefaultElmHome(): string {
   }
 }
 
+function readElmVersion(elmJsonPath: string): string | null {
+  // Only an application-style exact version names an ELM_HOME directory;
+  // a package-style range like "0.19.0 <= v < 0.20.0" does not.
+  try {
+    const elmVersion = JSON.parse(fs.readFileSync(elmJsonPath, { encoding: "utf-8" }))["elm-version"]
+    return typeof elmVersion === "string" && /^\d+\.\d+\.\d+$/.test(elmVersion) ? elmVersion : null
+  } catch (error) {
+    return null
+  }
+}
+
 function createEnvironment(): Environment {
   const cwd = process.cwd()
   const elmJsonPath = path.join(cwd, "elm.json")
   const sideloadConfigPath = path.join(cwd, "elm.sideload.json")
   const envElmHome = process.env.ELM_HOME
   const hasElmJson = fs.existsSync(elmJsonPath)
-  const elmVersion = hasElmJson
-    ? JSON.parse(fs.readFileSync(elmJsonPath, { encoding: "utf-8" }))["elm-version"]
-    : "0.19.1"
+  const elmVersion = (hasElmJson ? readElmVersion(elmJsonPath) : null) ?? "0.19.1"
 
   const elmHome = envElmHome
     ? {
